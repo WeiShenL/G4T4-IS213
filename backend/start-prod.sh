@@ -1,15 +1,16 @@
 #!/bin/bash
 
 # ===========================================
-# FeastFinder Local Development Startup Script
+# FeastFinder Production Startup Script
 # ===========================================
-# This script starts all services including local Supabase
+# This script starts all services including local Supabase in Production Mode
+# (Unbinding internal microservice & admin ports from 0.0.0.0)
 # ===========================================
 
 set -e
 
 echo "=========================================="
-echo "FeastFinder Local Development Setup"
+echo "FeastFinder Production Setup"
 echo "=========================================="
 
 # Colors for output
@@ -88,23 +89,21 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA auth TO supabase_admin;
 echo "Reloading PostgREST schema cache..."
 docker exec supabase-db psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload schema';" > /dev/null && echo -e "${GREEN}PostgREST cache reloaded!${NC}"
 
-# Step 3: Start application services
-echo -e "\n${YELLOW}Step 3: Starting FeastFinder application services...${NC}"
+# Step 3: Start application services with production overrides
+echo -e "\n${YELLOW}Step 3: Starting FeastFinder application services (Production Mode)...${NC}"
 cd "$SCRIPT_DIR"
-docker compose up -d --build
+docker compose -f docker-compose.yaml -f docker-compose.prod.yml up -d --build
 
 echo -e "\n${GREEN}=========================================="
-echo "All services started successfully!"
+echo "All production services started successfully!"
 echo "==========================================${NC}"
 echo ""
 echo "Access points:"
-echo "  - Frontend:          http://localhost:5173 (run 'npm run dev' in frontend/)"
-echo "  - Kong API Gateway:  http://localhost:8000"
-echo "  - Kong Admin:        http://localhost:8001"
-echo "  - Kong Manager:      http://localhost:8002"
-echo "  - Supabase Studio:   http://localhost:3000"
-echo "  - Supabase API:      http://localhost:8100"
-echo "  - RabbitMQ Console:  http://localhost:15672 (guest/guest)"
+echo "  - Public API Gateway: http://localhost:8000"
+echo "  - Localhost Admin UIs (Accessible via SSH tunnel):"
+echo "      * Kong Admin:       http://localhost:8001"
+echo "      * Kong Manager:     http://localhost:8002"
+echo "      * RabbitMQ Console: http://localhost:15672"
 echo ""
 echo "To view logs:"
 echo "  docker-compose logs -f [service-name]"

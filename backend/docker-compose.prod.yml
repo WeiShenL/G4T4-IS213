@@ -1,0 +1,60 @@
+# Production Overrides for FeastFinder Stack
+# Usage: docker compose -f docker-compose.yaml -f docker-compose.prod.yml up -d
+
+version: '3.8'
+
+services:
+  # Kong Postgres DB: Restrict to localhost only
+  kong-database:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  # Kong API Gateway: Public proxy on 8000, Admin ports restricted to localhost
+  kong:
+    ports:
+      - "8000:8000"
+      - "127.0.0.1:8001:8001"
+      - "127.0.0.1:8002:8002"
+
+  # RabbitMQ: AMQP & Management UI restricted to localhost
+  rabbitmq:
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+
+  # Microservices: Remove all host port exposure (accessible only internally via Kong API Gateway)
+  reservation-service:
+    ports: []
+
+  user-service:
+    ports: []
+
+  notification-service:
+    ports: []
+
+  payment-service:
+    ports: []
+
+  waitlist-service:
+    ports: []
+
+  accept-reallocation-service:
+    ports: []
+
+  reallocate-reservation-service:
+    ports: []
+
+  driver-service:
+    ports: []
+
+  driver-details-service:
+    ports: []
+
+  geo-service:
+    ports: []
+
+  driver-status-service:
+    ports: []
+
+  dms-service:
+    ports: []
