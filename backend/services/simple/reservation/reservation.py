@@ -1,11 +1,14 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import random
 import requests
+
+# Configuration constants
+MAX_BOOKING_DAYS_AHEAD = 90  # Maximum days in advance a reservation can be made
 
 load_dotenv()
 
@@ -60,12 +63,70 @@ def create_reservation():
                     "code": 400,
                     "message": f"Missing required field: {field}"
                 }), 400
-                
+
+        # Validate reservation time (atomic - only checks against time constraints)
+        reservation_time_str = data.get('time')
+        if reservation_time_str:
+            try:
+                # Parse the reservation time
+                reservation_time = datetime.fromisoformat(reservation_time_str.replace('Z', '+00:00'))
+                now = datetime.now(reservation_time.tzinfo) if reservation_time.tzinfo else datetime.now()
+
+                # Check if reservation is in the past
+                if reservation_time < now - timedelta(minutes=5):  # 5 min grace period
+                    return jsonify({
+                        "code": 400,
+                        "message": "Cannot create reservation for a past time"
+                    }), 400
+
+                # Check if reservation is too far in the future
+                max_future_date = now + timedelta(days=MAX_BOOKING_DAYS_AHEAD)
+                if reservation_time > max_future_date:
+                    return jsonify({
+                        "code": 400,
+                        "message": f"Cannot create reservation more than {MAX_BOOKING_DAYS_AHEAD} days in advance"
+                    }), 400
+            except ValueError as e:
+                print(f"Warning: Could not parse reservation time '{reservation_time_str}': {e}")
+                # Allow if time format is invalid - let Supabase handle it
+
+        # Check for duplicate active booking (atomic - only checks own table)
+        user_id = data.get('user_id')
+        restaurant_id = data['restaurant_id']
+        existing_booking = supabase.table('reservation').select('reservation_id').eq('user_id', user_id).eq('restaurant_id', restaurant_id).eq('status', 'Booked').execute()
+
+        if existing_booking.data:
+            return jsonify({
+                "code": 409,
+                "message": "User already has an active reservation at this restaurant",
+                "existing_reservation_id": existing_booking.data[0]['reservation_id']
+            }), 409
+
         # Auto-assign table number if not provided
         table_no = data.get('table_no')
+        restaurant_id = data['restaurant_id']
+
         if table_no is None:
-            # Assign a random table between 1-50
-            table_no = random.randint(1, 50)
+            # Get occupied tables for this restaurant to assign an available one
+            occupied_response = supabase.table('reservation').select('table_no').eq('restaurant_id', restaurant_id).eq('status', 'Booked').execute()
+
+            occupied_tables = set()
+            if occupied_response.data:
+                occupied_tables = {r['table_no'] for r in occupied_response.data if r.get('table_no')}
+
+            # Find the first available table (1-50)
+            # In production, this should use the restaurant's actual table count
+            max_tables = 50
+            available_tables = [t for t in range(1, max_tables + 1) if t not in occupied_tables]
+
+            if available_tables:
+                # Assign the first available table (deterministic, prevents collisions)
+                table_no = available_tables[0]
+            else:
+                # All tables occupied - this shouldn't happen if capacity check works
+                # Fall back to random as last resort
+                table_no = random.randint(1, max_tables)
+                print(f"Warning: All tables appear occupied, assigned random table {table_no}")
         
         # Create a new reservation
         new_reservation = {
@@ -132,24 +193,85 @@ def delete_reservation(reservation_id):
             "message": f"An error occurred: {str(e)}"
         }), 500
 
+# Get all reservations by restaurant_id
+@app.route("/api/reservations/restaurant/<int:restaurant_id>", methods=['GET'])
+def get_restaurant_reservations(restaurant_id):
+    try:
+        response = supabase.table('reservation').select('*').eq('restaurant_id', restaurant_id).execute()
+        reservations = response.data
+
+        return jsonify({
+            "code": 200,
+            "data": {
+                "reservations": reservations if reservations else []
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "code": 500,
+            "message": f"An error occurred: {str(e)}"
+        }), 500
+
+
+# Get ACTIVE reservations by restaurant_id (status = 'Booked')
+# This is used for capacity calculation - only count active bookings
+@app.route("/api/reservations/restaurant/<int:restaurant_id>/active", methods=['GET'])
+def get_active_restaurant_reservations(restaurant_id):
+    try:
+        response = supabase.table('reservation').select('*').eq('restaurant_id', restaurant_id).eq('status', 'Booked').execute()
+        reservations = response.data
+
+        return jsonify({
+            "code": 200,
+            "data": {
+                "reservations": reservations if reservations else [],
+                "count": len(reservations) if reservations else 0
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "code": 500,
+            "message": f"An error occurred: {str(e)}"
+        }), 500
+
+
+# Get occupied tables for a restaurant (for table assignment)
+@app.route("/api/reservations/restaurant/<int:restaurant_id>/occupied-tables", methods=['GET'])
+def get_occupied_tables(restaurant_id):
+    try:
+        response = supabase.table('reservation').select('table_no').eq('restaurant_id', restaurant_id).eq('status', 'Booked').execute()
+
+        occupied_tables = []
+        if response.data:
+            occupied_tables = [r['table_no'] for r in response.data if r.get('table_no')]
+
+        return jsonify({
+            "code": 200,
+            "data": {
+                "occupied_tables": occupied_tables,
+                "count": len(occupied_tables)
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "code": 500,
+            "message": f"An error occurred: {str(e)}"
+        }), 500
+
+
 # Get reservations by user_id
 @app.route("/api/reservations/user/<string:user_id>", methods=['GET'])
 def get_user_reservations(user_id):
     try:
         response = supabase.table('reservation').select('*').eq('user_id', user_id).execute()
         reservations = response.data
-        
-        if reservations:
-            return jsonify({
-                "code": 200,
-                "data": {
-                    "reservations": reservations
-                }
-            })
+
         return jsonify({
-            "code": 404,
-            "message": f"No reservations found for user: {user_id}"
-        }), 404
+            "code": 200,
+            "data": {
+                "reservations": reservations if reservations else []
+            }
+        }), 200
     except Exception as e:
         return jsonify({
             "code": 500,

@@ -29,7 +29,8 @@ def health_check():
 def get_all_restaurants():
     try:
         response = supabase.table('restaurant').select('*').execute()
-        restaurant_list = response.data
+        # sort by least seats so can test easily (the waitlist and reallocation logic)
+        restaurant_list = sorted(response.data, key=lambda x: x.get('capacity', 0)) if response.data else []
         
         if restaurant_list:
             return jsonify({
@@ -75,7 +76,8 @@ def get_restaurant(restaurant_id):
 def get_restaurants_by_cuisine(cuisine):
     try:
         response = supabase.table('restaurant').select('*').eq('cuisine', cuisine).execute()
-        restaurants = response.data
+        # sort by least seats so can test easily (the waitlist and reallocation logic)
+        restaurants = sorted(response.data, key=lambda x: x.get('capacity', 0)) if response.data else []
         
         if restaurants:
             return jsonify({
@@ -101,7 +103,8 @@ def get_restaurants_by_availability(availability):
         # Convert integer to boolean for Supabase query
         is_available = bool(availability)
         response = supabase.table('restaurant').select('*').eq('availability', is_available).execute()
-        restaurants = response.data
+        # sort by least seats so can test easily (the waitlist and reallocation logic)
+        restaurants = sorted(response.data, key=lambda x: x.get('capacity', 0)) if response.data else []
         
         if restaurants:
             return jsonify({

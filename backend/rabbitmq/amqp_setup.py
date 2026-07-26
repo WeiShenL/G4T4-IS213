@@ -84,6 +84,12 @@ create_queue(
 create_queue(
     channel=channel,
     exchange_name=exchange_name,
+    queue_name="Reservation_Decline",
+    routing_key="reservation.decline",
+)
+create_queue(
+    channel=channel,
+    exchange_name=exchange_name,
     queue_name="Reallocation_Notice",
     routing_key="reallocation.notice",
 )

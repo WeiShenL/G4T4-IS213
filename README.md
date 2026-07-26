@@ -8,6 +8,17 @@
 
 Restaurant table booking with waitlist reallocation and delivery.
 
+> [!NOTE]
+> **Submitted Project Snapshot:** The original project submission for evaluation is preserved in the [`submitted-project`](https://github.com/WeiShenL/G4T4-IS213/tree/submitted-project) branch (`git checkout submitted-project`).
+> 
+> **Post Submission Improvements (Added by Me):**
+> - **Local Self-Hosted Supabase**: Full Docker setup with Supabase Realtime for live order & driver dashboard updates.
+> - **Real-Time Live Dashboards**: Instant WebSocket updates via Supabase Realtime for Customer & Driver dashboards (no manual page refreshes needed).
+> - **Native Waitlist Microservice**: Replaced OutSystems with custom Python microservice & decline reallocation workflow.
+> - **Resend Email Service**: Integrated Resend API for transactional notifications, instead of paid Twilio SMS API.
+> - **Production VPC Ready**: Docker containerization & single-command deployment scripts (`start-local.sh`).
+
+
 ## Problem Statement
 
 Restaurants face significant revenue loss due to last-minute cancellations, inefficient seat allocation, and high delivery platform commissions. There is a need for an integrated reservation and delivery management system for restaurants.
@@ -25,30 +36,48 @@ Ensure you have the following installed:
 
 ## Getting Started
 
-**Important** Put .env files into backend and frontend directory
-
 Follow these steps to set up the FeastFinder application on your local machine:
 
-### 1. Open terminal and run the following command:
+### 1. Setup Environment Files
 ```bash
-  cd backend
-  docker-compose up -d --build
-  docker-compose down
+# Backend environment
+cp backend/.env.example backend/.env
+cp backend/supabase/.env.example backend/supabase/.env
+
+# Frontend environment
+cp frontend/.env.example frontend/.env
 ```
 
-### 2. Open another terminal to Install Dependencies
-Navigate to the frontend directory:
+### 2. Start All Backend Services (Supabase + Microservices)
+```bash
+cd backend
+./start-local.sh
+```
+This starts local Supabase and all 17 microservices via Docker.
+
+### 3. Install Frontend Dependencies & Run
 ```bash
 cd frontend
 npm install
-```
-
-### 3. Run the Development Server
-After installing dependencies, start the development server:
-```bash
 npm run dev
 ```
-This will launch the application, typically at [http://localhost:5173](http://localhost:5173).
+
+The application will be available at [http://localhost:5173](http://localhost:5173).
+
+### Access Points
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:5173 |
+| Kong API Gateway | http://localhost:8000 |
+| Supabase Studio | http://localhost:3000 |
+| Supabase API | http://localhost:8100 |
+| RabbitMQ Console | http://localhost:15672 (guest/guest) |
+
+### Stop All Services
+```bash
+cd backend
+./stop-local.sh
+```
 
 ## Technical Architecture Diagram
 <img width="809" alt="Screenshot 2025-04-11 at 7 25 24 AM" src="https://github.com/user-attachments/assets/c41e08a8-5bb9-4c39-b9f0-4b1fe3d71d7e" />
@@ -80,10 +109,10 @@ This will launch the application, typically at [http://localhost:5173](http://lo
 <p align="center">
 <a href="https://maps.google.com/"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/bd/Google_Maps_Logo_2020.svg/533px-Google_Maps_Logo_2020.svg.png" alt="Google Maps" height="40"/></a>&nbsp;&nbsp;
 <a href="https://stripe.com/"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Stripe_Logo%2C_revised_2016.svg/1280px-Stripe_Logo%2C_revised_2016.svg.png" alt="Stripe" height="40"/></a>&nbsp;&nbsp;
-<a href="https://www.twilio.com/"><img src="https://upload.wikimedia.org/wikipedia/commons/c/c0/Twilio_logo.png" alt="Twilio" height="40" /></a>&nbsp;&nbsp;
+<a href="https://resend.com/"><img src="https://cdn.resend.com/brand/resend-icon-black.svg" alt="Resend" height="40" /></a>&nbsp;&nbsp;
 <a href="https://openstreetmap.com/"><img src="https://www.openstreetmap.org/assets/osm_logo-4b074077c29e100f40ee64f5177886e36b570d4cc3ab10c7b263003d09642e3f.svg" alt="Open Street Map" height="40"/></a>&nbsp;&nbsp;
 <br>
-<i>Google Maps API · Stripe · Twilio · Open Street Map</i>
+<i>Google Maps API · Stripe · Resend Email · Open Street Map</i>
 </p>
 <br>
 

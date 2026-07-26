@@ -150,7 +150,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabaseClient, signOut } from '@/services/supabase';
 import { checkPendingReservations } from '@/services/reservationService';
@@ -169,6 +169,8 @@ export default {
     const isLoading = ref(true);
     const errorMessage = ref('');
     const hasPendingReservation = ref(false);
+    let reservationSubscription = null;
+    let isRefreshingPending = false;
     const openRestaurants = ref([]);
     const loadingRestaurants = ref(false);
     
@@ -259,6 +261,62 @@ export default {
       return reviewContents[restaurantIndex % reviewContents.length][reviewIndex % 3];
     };
     
+    // Re-read the user's pending table offer and sync the UI to it. Safe to call
+    // repeatedly - the bell, dropdown item and alert are all bound to
+    // hasPendingReservation, so they follow whatever this sets.
+    const refreshPendingReservation = async (userId) => {
+      if (isRefreshingPending) {
+        return;
+      }
+      isRefreshingPending = true;
+
+      try {
+        const pendingReservations = await checkPendingReservations(userId);
+        console.log(`📋 Pending table offers for user: ${pendingReservations.length}`);
+        hasPendingReservation.value = pendingReservations.length > 0;
+
+        if (hasPendingReservation.value) {
+          // Stash it for the accept booking page, which reads it from localStorage.
+          localStorage.setItem('pendingReservation', JSON.stringify(pendingReservations[0]));
+        } else {
+          // Offer is gone (accepted, or passed on to someone else). Without this the
+          // stale blob survives and /accept-reallocation renders an offer that no
+          // longer exists.
+          localStorage.removeItem('pendingReservation');
+        }
+      } catch (error) {
+        console.error('Error checking pending reservations:', error);
+        // Non-critical, leave the current state alone and try again on the next event
+      } finally {
+        isRefreshingPending = false;
+      }
+    };
+
+    // No filter on the subscription: RLS already restricts delivered rows to this
+    // user, and a server-side filter drops events silently when it doesn't match.
+    const subscribeToReservationChanges = (userId) => {
+      console.log('🔔 Subscribing to reservation changes for pending table offers...');
+
+      reservationSubscription = supabaseClient
+        .channel('pending-reservations')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'reservation' },
+          (payload) => {
+            console.log('⚡ Reservation event received via Realtime:', payload);
+            // The event is only a trigger. We re-fetch rather than using payload.new
+            // because /accept-reallocation expects the API's reservation shape, not
+            // the raw row.
+            refreshPendingReservation(userId);
+          }
+        )
+        .subscribe((status, err) => {
+          // SUBSCRIBED alone doesn't mean events will flow - CHANNEL_ERROR here is how
+          // a missing publication entry or a broken realtime schema surfaces.
+          console.log(`🔔 Reservation channel status: ${status}`, err || '');
+        });
+    };
+
     // Load user data when component mounts
     onMounted(async () => {
       try {
@@ -333,19 +391,14 @@ export default {
         console.log('User data loaded successfully');
         
         // Check for pending reservations
-        try {
-          const pendingReservations = await checkPendingReservations(profileData.id);
-          hasPendingReservation.value = pendingReservations.length > 0;
-          
-          if (hasPendingReservation.value) {
-            // Store pending reservation in localStorage for the accept booking page
-            localStorage.setItem('pendingReservation', JSON.stringify(pendingReservations[0]));
-          }
-        } catch (error) {
-          console.error('Error checking pending reservations:', error);
-          // Non-critical error, continue loading dashboard
-        }
-        
+        await refreshPendingReservation(profileData.id);
+
+        // Live updates: a cancellation reallocates the reservation row to the next
+        // waitlisted user, so the offer arrives as an UPDATE on public.reservation.
+        // setAuth must run first or Realtime evaluates RLS as anon and sends nothing.
+        supabaseClient.realtime.setAuth(sessionData.session.access_token);
+        subscribeToReservationChanges(profileData.id);
+
         // Fetch open restaurants
         try {
           loadingRestaurants.value = true;
@@ -364,7 +417,14 @@ export default {
         isLoading.value = false;
       }
     });
-    
+
+    onUnmounted(() => {
+      if (reservationSubscription) {
+        supabaseClient.removeChannel(reservationSubscription);
+        reservationSubscription = null;
+      }
+    });
+
     // Logout function
     const logout = async () => {
       try {

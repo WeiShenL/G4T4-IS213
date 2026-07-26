@@ -27,13 +27,31 @@ def health_check():
         "timestamp": datetime.now().isoformat()
     }), 200
     
+# Cache of address -> coordinates, so the same address is only ever looked up once.
+# A delivery batch repeats the same handful of restaurant/customer addresses many
+# times over, and each miss costs a network round trip plus the rate-limit sleep.
+_geocode_cache = {}
+
 # Geocoding function
 def geocode_address(address):
 
     #Converts an address into a coordinate string "(latitude,longitude)" using OpenStreetMap Nominatim API.
     #:param address: The address to geocode (e.g., "123 Test St").
     #:return: A string in the format "(latitude,longitude)", or None if geocoding fails.
-    
+
+    if address in _geocode_cache:
+        return _geocode_cache[address]
+
+    coordinates = _geocode_uncached(address)
+    _geocode_cache[address] = coordinates
+
+    # Nominatim asks for at most 1 request/sec. Sleep only after a real lookup,
+    # so cache hits cost nothing.
+    time.sleep(1)
+    return coordinates
+
+
+def _geocode_uncached(address):
     # Hardcoded coordinates for common addresses in Singapore if API fails. (fallback)
     hardcoded_locations = {
         "30 Victoria St": "1.29548985,103.8520116901307",
@@ -56,7 +74,7 @@ def geocode_address(address):
         headers = {
             "User-Agent": "FeastFinder/1.0 (your-delivery@example.com)"
         }
-        response = requests.get(url, params=params, headers=headers)
+        response = requests.get(url, params=params, headers=headers, timeout=10)
         data = response.json()
 
         if data:
@@ -163,7 +181,6 @@ def find_nearby_restaurants():
 
             # Geocode the restaurant's address
             restaurant_coordinates = geocode_address(location_name)
-            time.sleep(1)  # Avoid rate limiting
             print(f"Geocoded restaurant {name}: {restaurant_coordinates}")
             if not restaurant_coordinates:
                 print(f"Skipping restaurant {name} due to invalid address.")
@@ -180,7 +197,6 @@ def find_nearby_restaurants():
                     customer = order.get("customer", {})
                     customer_location = customer.get("location")
                     customer_coordinates = geocode_address(customer_location)
-                    time.sleep(1)  # Avoid rate limiting
                     print(f"Geocoded customer at {customer_location}: {customer_coordinates}")
                     if not customer_coordinates:
                         print(f"Skipping customer at {customer_location} due to invalid address.")
