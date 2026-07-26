@@ -33,7 +33,7 @@
         <div class="row mb-4">
           <div class="col-12">
             <div class="welcome-card">
-              <h2>Welcome, <span v-if="user">{{ user.customerName }}</span><span v-else>Driver</span>!</h2>
+              <h2>Welcome, <span v-if="user">{{ user.driverName }}</span><span v-else>Driver</span>!</h2>
               <p>Manage your delivery requests and view route navigation</p>
 
               <!-- Resend Email Notification Banner -->
