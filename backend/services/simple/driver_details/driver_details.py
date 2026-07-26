@@ -2,6 +2,7 @@
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 import os
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -19,6 +20,8 @@ app = Flask(__name__)
 
 @app.errorhandler(Exception)
 def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
     app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
     return jsonify({"error": "An internal server error occurred"}), 500
 
@@ -100,16 +103,12 @@ def get_driver_details_by_id(driver_id):
 
 @app.route("/api/driverdetails/<uuid:driver_id>", methods=['PATCH'])
 def update_driver_availability(driver_id):
-    """
-    Update driver availability for a specific driver_id.
-    No pre-check for driver existence is performed.
-    """
     try:
         # Step 1: Convert driver_id to string (required for Supabase queries)
         driver_id_str = str(driver_id)
 
         # Step 2: Parse the request body
-        data = request.json
+        data = request.json or {}
         availability = data.get("availability")
 
         if availability is None:
@@ -153,10 +152,6 @@ def update_driver_availability(driver_id):
 
 @app.route("/api/driverdetails/<uuid:driver_id>/complete-delivery", methods=['PATCH'])
 def update_delivery_completion(driver_id):
-    """
-    Update driver's total deliveries and earnings when a delivery is completed.
-    Adds 1 to total_deliveries and $5.00 to total_earnings.
-    """
     try:
         # Convert driver_id to string (required for Supabase queries)
         driver_id_str = str(driver_id)
@@ -224,7 +219,7 @@ def update_driver_location(driver_id):
         driver_id_str = str(driver_id)
         
         # Parse the request body
-        data = request.json
+        data = request.json or {}
         location = data.get("location")
         accuracy = data.get("accuracy")
         
@@ -239,12 +234,15 @@ def update_driver_location(driver_id):
             "live_location": location
         }).eq("driver_id", driver_id_str).execute()
         
-        # Check if the update was successful
+        # If record doesn't exist yet, automatically insert it (upsert)
         if not update_response.data:
-            return jsonify({
-                "code": 404,
-                "message": f"Driver with ID {driver_id_str} not found or no rows updated."
-            }), 404
+            supabase.table("driverdetails").insert({
+                "driver_id": driver_id_str,
+                "live_location": location,
+                "availability": True,
+                "total_deliveries": 0,
+                "total_earnings": 0.00
+            }).execute()
         
         # Return success response
         return jsonify({

@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 import os
 import requests
 from dotenv import load_dotenv
@@ -14,6 +15,8 @@ app = Flask(__name__)
 
 @app.errorhandler(Exception)
 def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
     app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
     return jsonify({"error": "An internal server error occurred"}), 500
 
@@ -75,11 +78,15 @@ def get_delivery_management_data():
 
         # Fetch all delivery orders (regardless of driver assignment)
         order_response = requests.get(f"{ORDER_SERVICE_URL}/api/orders/type/delivery", timeout=SERVICE_TIMEOUT)
-        if order_response.status_code != 200:
+        if order_response.status_code == 404:
+            delivery_orders = []
+        elif order_response.status_code != 200:
             return jsonify({"code": 500, "message": "Failed to fetch delivery orders."}), 500
-        delivery_orders = order_response.json().get("data", {}).get("orders", [])
+        else:
+            delivery_orders = order_response.json().get("data", {}).get("orders", [])
+
         if not delivery_orders:
-            # Return empty restaurants list with 200 status code instead of 404 error
+            # Return empty restaurants list with 200 status code instead of 500 error
             return jsonify({
                 "code": 200,
                 "data": {

@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import resend
 from datetime import datetime
 from supabase import create_client, Client as SupabaseClient
+from werkzeug.exceptions import HTTPException
 
 # Load environment variables
 load_dotenv()
@@ -25,6 +26,8 @@ app = Flask(__name__)
 
 @app.errorhandler(Exception)
 def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
     app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
     return jsonify({"error": "An internal server error occurred"}), 500
 

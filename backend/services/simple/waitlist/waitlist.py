@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 import os
 from datetime import datetime
 from dotenv import load_dotenv
@@ -15,6 +16,8 @@ app = Flask(__name__)
 
 @app.errorhandler(Exception)
 def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
     app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
     return jsonify({"error": "An internal server error occurred"}), 500
 

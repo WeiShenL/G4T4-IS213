@@ -339,18 +339,25 @@ export default {
       markers.value.forEach(marker => marker.setMap(null));
       markers.value = [];
       
-      // Set driver marker
-      const driverCoords = data.data.driver.location.split(',').map(Number);
-      const driverMarker = new google.maps.Marker({
-        position: { lat: driverCoords[0], lng: driverCoords[1] },
-        map: map.value,
-        icon: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png'
-      });
-      markers.value.push(driverMarker);
+      // Set driver marker if valid lat,lng coordinates exist
+      if (data.data?.driver?.location && data.data.driver.location.includes(',')) {
+        const driverCoords = data.data.driver.location.split(',').map(Number);
+        if (!isNaN(driverCoords[0]) && !isNaN(driverCoords[1])) {
+          const driverMarker = new google.maps.Marker({
+            position: { lat: driverCoords[0], lng: driverCoords[1] },
+            map: map.value,
+            icon: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png'
+          });
+          markers.value.push(driverMarker);
+        }
+      }
       
       // Set restaurant markers
-      data.data.restaurants.forEach(restaurant => {
+      (data.data?.restaurants || []).forEach(restaurant => {
+        if (!restaurant.coordinates || !restaurant.coordinates.includes(',')) return;
         const coords = restaurant.coordinates.split(',').map(Number);
+        if (isNaN(coords[0]) || isNaN(coords[1])) return;
+
         const marker = new google.maps.Marker({
           position: { lat: coords[0], lng: coords[1] },
           map: map.value,
@@ -405,10 +412,15 @@ export default {
         markers.value.push(marker);
       });
       
-      // Adjust map bounds if there are markers
-      if (markers.value.length > 0) {
+      // Adjust map bounds if there are valid markers
+      const validMarkers = markers.value.filter(marker => {
+        const pos = marker && marker.getPosition();
+        return pos && typeof pos.lat === 'function' && !isNaN(pos.lat()) && !isNaN(pos.lng());
+      });
+
+      if (validMarkers.length > 0) {
         const bounds = new google.maps.LatLngBounds();
-        markers.value.forEach(marker => bounds.extend(marker.getPosition()));
+        validMarkers.forEach(marker => bounds.extend(marker.getPosition()));
         map.value.fitBounds(bounds);
       }
     };
@@ -718,20 +730,6 @@ export default {
               notifyNewDeliveryOrder(payload.new);
             }
 
-            if (user.value?.id && !isFetching.value) {
-              fetchDeliveryData();
-            }
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'driverdetails'
-          },
-          (payload) => {
-            console.log('⚡ DriverDetails event received via Realtime:', payload);
             if (user.value?.id && !isFetching.value) {
               fetchDeliveryData();
             }

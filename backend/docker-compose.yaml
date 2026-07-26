@@ -87,6 +87,8 @@ services:
     volumes:
       - ./kong/setup_kong.sh:/setup_kong.sh
     entrypoint: ["sh", "/setup_kong.sh"]
+    environment:
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173}
     depends_on:
       - kong
     networks:
