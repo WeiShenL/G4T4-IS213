@@ -24,7 +24,16 @@ ORDER_SERVICE_URL = os.environ.get("ORDER_SERVICE_URL", "http://order-service:50
 RESERVATION_SERVICE_URL = os.environ.get("RESERVATION_SERVICE_URL", "http://reservation-service:5000")
 WAITLIST_SERVICE_URL = os.environ.get("WAITLIST_SERVICE_URL", "http://waitlist-service:5000")
 
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
 app = Flask(__name__)
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
 # Allow CORS for allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
 if allowed_origins != "*":
@@ -412,8 +421,11 @@ def create_booking():
         }), 201
     
     except Exception as e:
-        print(f"Error in create_booking: {str(e)}")
-        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+        app.logger.error("Error in create_booking: %s", str(e), exc_info=True)
+        return jsonify({
+            "code": 500,
+            "error": "An internal server error occurred"
+        }), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5007))

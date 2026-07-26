@@ -4,7 +4,18 @@ import os
 import requests
 from dotenv import load_dotenv
 from datetime import datetime
+import logging
+
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+
+app = Flask(__name__)
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
 
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
 if allowed_origins != "*":
@@ -191,8 +202,8 @@ def get_delivery_management_data():
         return geo_response.json()
 
     except Exception as e:
-        print(f"Error fetching delivery management data: {str(e)}")
-        return jsonify({"code": 500, "message": "An error occurred while fetching data."}), 500
+        app.logger.error("Error fetching delivery management data: %s", str(e), exc_info=True)
+        return jsonify({"code": 500, "message": "An internal server error occurred"}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5014))

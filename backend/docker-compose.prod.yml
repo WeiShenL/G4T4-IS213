@@ -1,8 +1,6 @@
 # Production Overrides for FeastFinder Stack
 # Usage: docker compose -f docker-compose.yaml -f docker-compose.prod.yml up -d
 
-version: '3.8'
-
 services:
   # Kong Postgres DB: Restrict to localhost only
   kong-database:

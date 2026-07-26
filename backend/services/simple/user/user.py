@@ -5,9 +5,18 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from datetime import datetime
 
+import logging
+
 load_dotenv()
 
+logging.basicConfig(level=logging.INFO)
+
 app = Flask(__name__)
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
 
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
 if allowed_origins != "*":
@@ -44,9 +53,10 @@ def get_user(user_id):
             "data": response.data[0]
         })
     except Exception as e:
+        app.logger.error("Error in get_user: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 if __name__ == '__main__':

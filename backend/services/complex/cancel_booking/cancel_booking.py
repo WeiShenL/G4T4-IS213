@@ -7,8 +7,19 @@ import pika
 import os
 from dotenv import load_dotenv
 from datetime import datetime
+import logging
+
 # Load environment variables
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+
+app = Flask(__name__)
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
 
 # RabbitMQ configuration
 RABBITMQ_HOST = os.environ.get("RABBITMQ_HOST", "localhost")
@@ -217,14 +228,16 @@ def process_cancellation(reservation_id):
             "reallocation_triggered": reallocation_success
         }), 200
     except Exception as e:
-        print(f"Error triggering notification: {str(e)}")
-        return jsonify({"error": f"Error triggering notification or reallocation: {str(e)}"}), 500
+        app.logger.error("Error triggering notification or reallocation: %s", str(e), exc_info=True)
+        return jsonify({"code": 500, "error": "An internal server error occurred"}), 500
 
 # # calls the existing method
 # @app.route('/api/cancel/reallocation/<int:reservation_id>', methods=['POST'])
 # def cancel_reallocation(reservation_id):
 #     # Simply call the existing cancellation method - it already does everything needed
 #     return process_cancellation(reservation_id)
+
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5008))

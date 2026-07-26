@@ -8,8 +8,19 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime
 
+import logging
+
 # Load environment variables
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+
+app = Flask(__name__)
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
 
 # RabbitMQ configuration
 RABBITMQ_HOST = os.environ.get("RABBITMQ_HOST", "localhost")
@@ -134,8 +145,8 @@ def accept_order():
         return jsonify({"code": 200, "message": "Order accepted successfully."}), 200
 
     except Exception as e:
-        print(f"Error accepting order: {str(e)}")
-        return jsonify({"code": 500, "message": "An error occurred while accepting the order."}), 500
+        app.logger.error("Error accepting order: %s", str(e), exc_info=True)
+        return jsonify({"code": 500, "message": "An internal server error occurred"}), 500
     
     
 @app.route("/api/pick-up-order", methods=['POST'])
@@ -191,8 +202,8 @@ def pick_up_order():
         return jsonify({"code": 200, "message": "Order pickedup successfully."}), 200
 
     except Exception as e:
-        print(f"Error accepting order: {str(e)}")
-        return jsonify({"code": 500, "message": "An error occurred while picking up the order."}), 500
+        app.logger.error("Error picking up order: %s", str(e), exc_info=True)
+        return jsonify({"code": 500, "message": "An internal server error occurred"}), 500
     
     
 
@@ -267,8 +278,8 @@ def deliver_order():
         return jsonify({"code": 200, "message": "Order delivered successfully."}), 200
 
     except Exception as e:
-        print(f"Error delivering order: {str(e)}")
-        return jsonify({"code": 500, "message": "An error occurred while delivering the order."}), 500
+        app.logger.error("Error delivering order: %s", str(e), exc_info=True)
+        return jsonify({"code": 500, "message": "An internal server error occurred"}), 500
 
 # not needed now since calling directly from the atomic driverdetail msc 
 # @app.route("/driver-stats/<uuid:driver_id>", methods=['GET'])
