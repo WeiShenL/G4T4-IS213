@@ -1,0 +1,15 @@
+# Development Dockerfile with Vite Hot Module Reloading (HMR)
+FROM node:20-alpine
+WORKDIR /app
+
+# Copy manifests and install dependencies
+COPY package*.json ./
+RUN npm install
+
+# Copy application source
+COPY . .
+
+EXPOSE 5173
+
+# Run Vite dev server bound to all interfaces for container access
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

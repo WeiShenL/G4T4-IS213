@@ -374,8 +374,17 @@ export default {
           const item = document.createElement('li');
           
           const orderInfo = document.createElement('div');
-          orderInfo.innerHTML = `${order.item_name} (Order #${order.order_id})<br>
-                                To: ${order.customer.name} (${order.customer.location})`;
+          
+          const line1 = document.createElement('span');
+          line1.textContent = `${order.item_name} (Order #${order.order_id})`;
+          orderInfo.appendChild(line1);
+          
+          orderInfo.appendChild(document.createElement('br'));
+          
+          const line2 = document.createElement('span');
+          line2.textContent = `To: ${order.customer.name} (${order.customer.location})`;
+          orderInfo.appendChild(line2);
+
           item.appendChild(orderInfo);
           
           const selectBtn = document.createElement('button');

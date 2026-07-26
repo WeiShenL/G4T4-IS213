@@ -91,8 +91,8 @@ docker exec supabase-db psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload s
 
 # Step 3: Start application services with production overrides
 echo -e "\n${YELLOW}Step 3: Starting FeastFinder application services (Production Mode)...${NC}"
-cd "$SCRIPT_DIR"
-docker compose -f docker-compose.yaml -f docker-compose.prod.yml up -d --build
+cd "$SCRIPT_DIR/.."
+docker compose -f docker-compose.yaml -f backend/docker-compose.prod.yml up -d --build
 
 echo -e "\n${GREEN}=========================================="
 echo "All production services started successfully!"

@@ -56,3 +56,12 @@ services:
 
   dms-service:
     ports: []
+
+  # Production Frontend: Build multi-stage Caddy container (zero Node.js runtime)
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+

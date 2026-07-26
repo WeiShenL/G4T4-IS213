@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS public.user_types (
 -- ===========================================
 CREATE TABLE IF NOT EXISTS public.driverdetails (
   driverdetail_id SERIAL PRIMARY KEY,
-  driver_id UUID DEFAULT gen_random_uuid(),
+  driver_id UUID NOT NULL,
   live_location VARCHAR,
   availability BOOLEAN DEFAULT false,
   total_deliveries INTEGER NOT NULL DEFAULT 0,

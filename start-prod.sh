@@ -1,15 +1,15 @@
 #!/bin/bash
 
 # ===========================================
-# FeastFinder Local Development Startup Script
+# FeastFinder Production Startup Script
 # ===========================================
-# This script starts all services including local Supabase
+# This script starts all services in Production Hardened Mode (Caddy Frontend + Network Port Lockdown)
 # ===========================================
 
 set -e
 
 echo "=========================================="
-echo "FeastFinder Local Development Setup"
+echo "FeastFinder Production Setup"
 echo "=========================================="
 
 # Colors for output
@@ -24,27 +24,32 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
-# Get script directory
+# Get script directory (Root)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Step 1: Setup environment files if they don't exist
 echo -e "\n${YELLOW}Step 1: Checking environment files...${NC}"
 
-if [ ! -f "$SCRIPT_DIR/supabase/.env" ]; then
-    echo "Creating supabase/.env from template..."
-    cp "$SCRIPT_DIR/supabase/.env.example" "$SCRIPT_DIR/supabase/.env"
+if [ ! -f "$SCRIPT_DIR/backend/supabase/.env" ]; then
+    echo "Creating backend/supabase/.env from template..."
+    cp "$SCRIPT_DIR/backend/supabase/.env.example" "$SCRIPT_DIR/backend/supabase/.env"
 fi
 
-if [ ! -f "$SCRIPT_DIR/.env" ]; then
+if [ ! -f "$SCRIPT_DIR/backend/.env" ]; then
     echo "Creating backend .env from template..."
-    cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
+    cp "$SCRIPT_DIR/backend/.env.example" "$SCRIPT_DIR/backend/.env"
+fi
+
+if [ ! -f "$SCRIPT_DIR/frontend/.env" ]; then
+    echo "Creating frontend .env from template..."
+    cp "$SCRIPT_DIR/frontend/.env.example" "$SCRIPT_DIR/frontend/.env"
 fi
 
 echo -e "${GREEN}Environment files ready!${NC}"
 
 # Step 2: Start Supabase
 echo -e "\n${YELLOW}Step 2: Starting Supabase services...${NC}"
-cd "$SCRIPT_DIR/supabase"
+cd "$SCRIPT_DIR/backend/supabase"
 docker compose up -d
 
 # Wait for Supabase to be healthy
@@ -59,9 +64,7 @@ echo -e "\n${GREEN}Supabase database is ready!${NC}"
 echo "Waiting for Supabase services to initialize..."
 sleep 10
 
-# Step 2.5: Wait for supabase-auth (GoTrue) to finish its migrations,
-# then apply the auth.users trigger. GoTrue creates the auth schema
-# after PostgreSQL initdb completes, so the trigger can only be created here.
+# Step 2.5: Wait for supabase-auth (GoTrue) to finish its migrations
 echo -e "\n${YELLOW}Step 2.5: Waiting for Supabase Auth to initialize auth schema...${NC}"
 until docker exec supabase-auth sh -c 'wget -qO- http://localhost:9999/health 2>/dev/null | grep -q "version"' 2>/dev/null; do
     echo -n "."
@@ -72,7 +75,7 @@ echo -e "\n${GREEN}Supabase Auth is ready!${NC}"
 echo "Applying app schema (depends on auth.users existing)..."
 for f in 01-schema.sql 02-triggers.sql 03-seed-data.sql 04-rls-policies.sql; do
     echo "  -> $f"
-    docker exec -i supabase-db psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "$SCRIPT_DIR/supabase/init/app-schema/$f" > /dev/null
+    docker exec -i supabase-db psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "$SCRIPT_DIR/backend/supabase/init/app-schema/$f" > /dev/null
 done
 echo -e "${GREEN}App schema applied!${NC}"
 
@@ -83,31 +86,28 @@ GRANT SELECT ON ALL TABLES IN SCHEMA auth TO supabase_admin;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA auth TO supabase_admin;
 " > /dev/null && echo -e "${GREEN}Studio permissions applied!${NC}"
 
-# PostgREST cached its schema before our app tables existed (it boots in parallel
-# with initdb). Tell it to reload so it sees the public tables.
 echo "Reloading PostgREST schema cache..."
 docker exec supabase-db psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload schema';" > /dev/null && echo -e "${GREEN}PostgREST cache reloaded!${NC}"
 
-# Step 3: Start application services
-echo -e "\n${YELLOW}Step 3: Starting FeastFinder application services...${NC}"
-cd "$SCRIPT_DIR/.."
-docker compose up -d --build
+# Step 3: Start application services with production overrides
+echo -e "\n${YELLOW}Step 3: Starting FeastFinder application services (Production Mode)...${NC}"
+cd "$SCRIPT_DIR"
+docker compose -f docker-compose.yaml -f backend/docker-compose.prod.yml up -d --build
 
 echo -e "\n${GREEN}=========================================="
-echo "All services started successfully!"
+echo "All production services started successfully!"
 echo "==========================================${NC}"
 echo ""
 echo "Access points:"
-echo "  - Frontend:          http://localhost:5173 (run 'npm run dev' in frontend/)"
-echo "  - Kong API Gateway:  http://localhost:8000"
-echo "  - Kong Admin:        http://localhost:8001"
-echo "  - Kong Manager:      http://localhost:8002"
-echo "  - Supabase Studio:   http://localhost:3000"
-echo "  - Supabase API:      http://localhost:8100"
-echo "  - RabbitMQ Console:  http://localhost:15672 (guest/guest)"
+echo "  - Production Caddy Frontend: http://localhost:8080"
+echo "  - Public API Gateway:        http://localhost:8000"
+echo "  - Localhost Admin UIs (SSH Tunnel only):"
+echo "      * Kong Admin:       http://localhost:8001"
+echo "      * Kong Manager:     http://localhost:8002"
+echo "      * RabbitMQ Console: http://localhost:15672"
 echo ""
 echo "To view logs:"
-echo "  docker-compose logs -f [service-name]"
+echo "  docker compose logs -f [service-name]"
 echo ""
 echo "To stop all services:"
-echo "  ./stop-local.sh"
+echo "  ./stop-prod.sh"

@@ -37,7 +37,7 @@ WAITLIST_SERVICE_URL = os.environ.get("WAITLIST_SERVICE_URL", "http://waitlist-s
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
 if allowed_origins != "*":
     allowed_origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
-CORS(app, resources={r"/*": {"origins": allowed_origins}})
+CORS(app, resources={r"/*": {"origins": allowed_origins, "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"]}})
 
 @app.route("/api/reallocate/health", methods=['GET'])
 def health_check():
