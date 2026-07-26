@@ -81,29 +81,30 @@ def accept_order():
         if not driver_id or not order_id:
             return jsonify({"code": 400, "message": "Missing driver_id or order_id."}), 400
 
-        # Update Driver Availability
-        driver_response = requests.patch(
-            f"{DRIVER_DETAILS_SERVICE_URL}/api/driverdetails/{driver_id}",
-            json={"availability": False}
-        )
-        if driver_response.status_code != 200:
-            return jsonify({"code": 500, "message": "Failed to update driver availability."}), 500
-        
-        # Fetch driver profile to get driver information
-        driver_profile_response = requests.get(f"{DRIVER_SERVICE_URL}/api/driver/{driver_id}")
-        if driver_profile_response.status_code != 200:
-            return jsonify({"code": 500, "message": "Failed to fetch driver profile."}), 500
-
-        driver_data = driver_profile_response.json().get("data", {})
-        driver_name = driver_data.get("driver_name", "Driver")  # Use the correct key for driver name
-
-        # Fetch Order Details
+        # STEP 1: Verify order exists BEFORE marking driver unavailable
+        # This prevents driver being marked unavailable for non-existent orders
         order_response = requests.get(f"{ORDER_SERVICE_URL}/api/orders/{order_id}")
         if order_response.status_code != 200:
             return jsonify({"code": 404, "message": "Order not found."}), 404
 
         order_data = order_response.json().get("data", {})
         customer_id = order_data.get("user_id")
+
+        # STEP 2: Fetch driver profile to verify driver exists
+        driver_profile_response = requests.get(f"{DRIVER_SERVICE_URL}/api/driver/{driver_id}")
+        if driver_profile_response.status_code != 200:
+            return jsonify({"code": 500, "message": "Failed to fetch driver profile."}), 500
+
+        driver_data = driver_profile_response.json().get("data", {})
+        driver_name = driver_data.get("driver_name", "Driver")
+
+        # STEP 3: Only mark driver unavailable AFTER verifying both order and driver exist
+        driver_response = requests.patch(
+            f"{DRIVER_DETAILS_SERVICE_URL}/api/driverdetails/{driver_id}",
+            json={"availability": False}
+        )
+        if driver_response.status_code != 200:
+            return jsonify({"code": 500, "message": "Failed to update driver availability."}), 500
      
 
         # Fetch Customer Details

@@ -127,6 +127,22 @@ create table public.user_types (
   )
 ) TABLESPACE pg_default;
 
+create table public.waitlist (
+  waitlist_id serial not null,
+  user_id uuid not null,
+  restaurant_id integer not null,
+  timestamp_added timestamp with time zone not null default now(),
+  status character varying(50) not null default 'waiting',
+  constraint waitlist_pkey primary key (waitlist_id),
+  constraint waitlist_user_id_fkey foreign KEY (user_id) references auth.users (id) on delete CASCADE,
+  constraint waitlist_restaurant_id_fkey foreign KEY (restaurant_id) references restaurant (restaurant_id) on delete CASCADE
+) TABLESPACE pg_default;
+
+-- Create index for faster waitlist queries
+create index waitlist_restaurant_id_idx on public.waitlist (restaurant_id);
+create index waitlist_user_id_idx on public.waitlist (user_id);
+create index waitlist_timestamp_idx on public.waitlist (timestamp_added);
+
 
 -- Add Pasta Paradise restaurant
 INSERT INTO public.restaurant (capacity, availability, name, address, rating, cuisine)

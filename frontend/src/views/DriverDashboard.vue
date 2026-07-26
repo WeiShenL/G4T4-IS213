@@ -8,9 +8,9 @@
           <router-link to="/driver-dashboard" class="dashboard-logo">
             <span>FeastFinder</span>
           </router-link>
-          <div class="dashboard-user">
+          <div class="dashboard-user d-flex align-items-center">
             <div class="dropdown">
-              <button class="btn dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+              <button class="btn dropdown-toggle" type="button" id="userDropdown" @click="toggleDropdown">
                 <i class="fas fa-user-circle"></i>
                 <span v-if="user">{{ user.driverName }}</span>
                 <span v-else>Loading...</span>
@@ -33,8 +33,20 @@
         <div class="row mb-4">
           <div class="col-12">
             <div class="welcome-card">
-              <h2>Welcome, <span v-if="user">{{ user.driverName }}</span><span v-else>Driver</span>!</h2>
-              <p>Ready to make some deliveries today?</p>
+              <h2>Welcome, <span v-if="user">{{ user.customerName }}</span><span v-else>Driver</span>!</h2>
+              <p>Manage your delivery requests and view route navigation</p>
+
+              <!-- Resend Email Notification Banner -->
+              <div class="alert alert-info border-0 shadow-sm mt-3 bg-light text-dark text-start">
+                <div class="d-flex align-items-center mb-1">
+                  <i class="fas fa-paper-plane text-primary me-2 fs-5"></i>
+                  <strong>Automated Customer Email Notifications Active!</strong>
+                </div>
+                <small class="text-muted d-block">
+                  When you accept, pick up, or deliver an order, customer status emails are automatically dispatched via Resend API. 
+                  <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to the developer's testing inbox).</em>
+                </small>
+              </div>
             </div>
           </div>
         </div>
@@ -130,7 +142,7 @@
 </template>
 
 <script>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabaseClient, signOut } from '@/services/supabase';
 import { loadGoogleMapsApi } from '@/services/googleMapsLoader';
@@ -148,6 +160,7 @@ export default {
     const errorMessage = ref('');
     const deliveryData = ref(null);
     const refreshNeeded = ref(true); // Flag to track if refresh is needed
+    const orderSubscription = ref(null); // Supabase realtime subscription
 
      // Map variables
     const isFetching   = ref(false);
@@ -226,6 +239,7 @@ export default {
             };
             // Show driver location on map
             showDriverLocationOnMap();
+            isFetching.value = false;
             return;
           }
           
@@ -590,23 +604,22 @@ export default {
             }
           },
           (error) => {
-            let errorMessage;
+            let geoErrMsg;
             switch(error.code) {
               case error.PERMISSION_DENIED:
-                errorMessage = "User denied the request for geolocation";
+                geoErrMsg = "User denied the request for geolocation";
                 break;
               case error.POSITION_UNAVAILABLE:
-                errorMessage = "Location information is unavailable";
+                geoErrMsg = "Location information is unavailable";
                 break;
               case error.TIMEOUT:
-                errorMessage = "The request to get user location timed out";
+                geoErrMsg = "The request to get user location timed out";
                 break;
               default:
-                errorMessage = "An unknown error occurred";
+                geoErrMsg = "An unknown error occurred";
                 break;
             }
-            console.error(`Geolocation error: ${errorMessage}`);
-            errorMessage.value = `Location error: ${errorMessage}. Please enable location services.`;
+            console.warn(`Geolocation notice: ${geoErrMsg}`);
           },
           {
             enableHighAccuracy: true, // Request high accuracy GPS data
@@ -660,6 +673,81 @@ export default {
       
       // Start animation
       animateStep();
+    };
+
+    // Show a browser notification for a newly available delivery order
+    const notifyNewDeliveryOrder = (order) => {
+      if (!('Notification' in window) || Notification.permission !== 'granted') {
+        return;
+      }
+
+      new Notification('New Delivery Order!', {
+        body: `Order #${order.order_id} is available for pickup`,
+        icon: '/favicon.ico'
+      });
+    };
+
+    // Setup Supabase Realtime subscription for new delivery orders
+    const setupRealtimeSubscription = () => {
+      console.log('🔔 Setting up Supabase Realtime subscription for orders...');
+
+      // Subscribe to changes on orders and driverdetails tables
+      orderSubscription.value = supabaseClient
+        .channel('delivery-orders')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'orders'
+          },
+          (payload) => {
+            console.log('⚡ Order event received via Realtime:', payload);
+
+            // Notify the driver when a brand new delivery order comes in
+            if (payload.eventType === 'INSERT' && payload.new?.order_type === 'delivery') {
+              notifyNewDeliveryOrder(payload.new);
+            }
+
+            if (user.value?.id && !isFetching.value) {
+              fetchDeliveryData();
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'driverdetails'
+          },
+          (payload) => {
+            console.log('⚡ DriverDetails event received via Realtime:', payload);
+            if (user.value?.id && !isFetching.value) {
+              fetchDeliveryData();
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log('🔔 Realtime subscription status:', status);
+        });
+    };
+
+    // Cleanup realtime subscription
+    const cleanupRealtimeSubscription = () => {
+      if (orderSubscription.value) {
+        console.log('🔕 Cleaning up Supabase Realtime subscription...');
+        supabaseClient.removeChannel(orderSubscription.value);
+        orderSubscription.value = null;
+      }
+    };
+
+    // Request notification permission
+    const requestNotificationPermission = async () => {
+      if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        console.log('Notification permission:', permission);
+      }
     };
 
     // Load user data when component mounts
@@ -732,7 +820,18 @@ export default {
         
         // Fetch driver stats after user data is loaded
         await fetchDriverStats();
-        
+
+        // Request notification permission for realtime alerts
+        await requestNotificationPermission();
+
+        // Set auth token on Realtime client for authenticated RLS evaluation
+        if (sessionData.session?.access_token) {
+          supabaseClient.realtime.setAuth(sessionData.session.access_token);
+        }
+
+        // Setup Supabase Realtime subscription for live order updates
+        setupRealtimeSubscription();
+
         // Load Google Maps but don't automatically fetch delivery data
         console.log('Loading Google Maps API from onMounted');
         loadGoogleMapsApi(() => {
@@ -740,8 +839,8 @@ export default {
           if (mapContainer.value) {
             initMap();
             // if want to auto fetch data, after map initialisation then uncomment this
-            // fetchDeliveryData();
-            
+            fetchDeliveryData();
+
             // tracking live location with device GPS
             updateDriverLocation(); // Immediate first update
             // Update location every minute for real-time tracking
@@ -753,7 +852,7 @@ export default {
               if (mapContainer.value) {
                 initMap();
                 // if want to auto fetch data, after map initialisation then uncomment this
-                // fetchDeliveryData();
+                fetchDeliveryData();
 
                 
               } else {
@@ -771,9 +870,17 @@ export default {
       }
     });
 
-   
+    // Cleanup when component unmounts
+    onUnmounted(() => {
+      console.log('DriverDashboard unmounting, cleaning up...');
+      cleanupRealtimeSubscription();
+    });
 
-    
+    const toggleDropdown = (event) => {
+      const dropdownMenu = event.target.closest('.dropdown').querySelector('.dropdown-menu');
+      dropdownMenu.classList.toggle('show');
+    };
+
     // Logout function
     const logout = async () => {
       try {
@@ -805,6 +912,7 @@ export default {
       errorMessage,
       driverStats,
       logout,
+      toggleDropdown,
 
       isFetching,
       mapContainer,

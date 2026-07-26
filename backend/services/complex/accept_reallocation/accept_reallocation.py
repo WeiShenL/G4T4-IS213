@@ -96,8 +96,10 @@ def accept_reallocation():
                     missing_fields.append(field)
             return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
 
-        # Generate a new reservation ID if needed
-        new_reservation_id = data.get("new_reservation_id", random.randrange(200, 999))
+        # Use the existing reservation_id instead of generating a random one
+        # This fixes the critical bug where random.randrange(200, 999) could cause collisions
+        # If a new_reservation_id is explicitly provided, use it; otherwise keep the existing ID
+        new_reservation_id = data.get("new_reservation_id", reservation_id)
 
         # Update Reservation Details via Reservation Service
         try:
@@ -212,6 +214,127 @@ def accept_reallocation():
     except Exception as e:
         print(f"Error in accept_reallocation: {str(e)}")
         return jsonify({"error": f"Error processing reallocation acceptance: {str(e)}"}), 500
+
+@app.route('/api/accept-reallocation/decline/<int:reservation_id>', methods=['POST'])
+def decline_reallocation(reservation_id):
+    """
+    Process a reallocation decline - cancels the reservation and offers to next user in waitlist
+    """
+    try:
+        # Call reservation.py to cancel the reservation (clears/nullifies fields)
+        reservation_response = requests.patch(
+            f"{RESERVATION_SERVICE_URL}/api/reservation/cancel/{reservation_id}"
+        )
+        reservation_response.raise_for_status()
+        reservation_data = reservation_response.json()
+        print(f"Reservation data received: {reservation_data}")
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to cancel reservation: {str(e)}")
+        return jsonify({"error": f"Failed to cancel reservation: {str(e)}"}), 500
+
+    # Extract user_id, table_no, refund_amount, and order_id from the response
+    user_id = reservation_data.get("user_id")
+    table_no = reservation_data.get("table_no")
+    restaurant_id = reservation_data.get("restaurant_id")
+    refund_amount = reservation_data.get("refund_amount")
+    payment_id = reservation_data.get("payment_id")
+    order_id = reservation_data.get("order_id")
+
+    if not user_id:
+        return jsonify({"error": "No user associated with this reservation"}), 404
+
+    # Get user details
+    try:
+        user_response = requests.get(f"{USER_SERVICE_URL}/api/user/{user_id}")
+        user_response.raise_for_status()
+        user_data = user_response.json()
+        print(f"User data received: {user_data}")
+
+        # Extract the user details we need
+        user_name = user_data.get("data", {}).get("customer_name", "Customer")
+        user_phone = user_data.get("data", {}).get("phone_number", "")
+
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to fetch user details: {str(e)}")
+        return jsonify({"error": f"Failed to fetch user details: {str(e)}"}), 500
+
+    # Process refund if payment_id exists
+    if payment_id:
+        try:
+            # Call the payment service to process the refund
+            refund_response = requests.post(
+                f"{PAYMENT_SERVICE_URL}/api/payment/refund",
+                json={"payment_id": payment_id}
+            )
+            refund_response.raise_for_status()
+            refund_data = refund_response.json()
+            print(f"Refund processed: {refund_data}")
+
+            # Delete the order associated with this order_id
+            if order_id:
+                delete_order_response = requests.delete(
+                    f"{ORDER_SERVICE_URL}/api/orders/{order_id}"
+                )
+                if delete_order_response.status_code == 200:
+                    print(f"Order with ID {order_id} deleted successfully")
+                else:
+                    print(f"Failed to delete order or no order found with ID: {order_id}")
+
+        except requests.exceptions.RequestException as e:
+            print(f"Failed to process refund: {str(e)}")
+            # Continue with cancellation even if refund fails
+
+    # Queue a notification message to RabbitMQ with decline message type
+    try:
+        notification_data = {
+            "reservation_id": reservation_id,
+            "user_id": user_id,
+            "user_name": user_name,
+            "user_phone": user_phone,
+            "table_no": table_no,
+            "refund_amount": refund_amount,
+            "payment_id": payment_id,
+            "message_type": "reservation.decline"
+        }
+
+        publish_to_rabbitmq("reservation.decline", notification_data)
+
+        # Trigger reallocation with retry logic (composite orchestration)
+        reallocation_data = {"reservation_id": reservation_id, "restaurant_id": restaurant_id}
+        reallocation_success = False
+        max_retries = 3
+        retry_delay = 1  # seconds
+
+        for attempt in range(max_retries):
+            try:
+                reallocation_response = requests.post(
+                    f"{REALLOCATE_RESERVATION_SERVICE_URL}/api/reallocate",
+                    json=reallocation_data,
+                    timeout=10
+                )
+                if reallocation_response.ok:
+                    reallocation_success = True
+                    print(f"Reallocation successful on attempt {attempt + 1}")
+                    break
+                else:
+                    print(f"Reallocation attempt {attempt + 1} failed: {reallocation_response.status_code}")
+            except requests.exceptions.RequestException as e:
+                print(f"Reallocation attempt {attempt + 1} error: {str(e)}")
+
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+
+        return jsonify({
+            "message": "Decline processed and notification sent." + (" Reallocation triggered for next user." if reallocation_success else " Reallocation could not be completed."),
+            "status": "declined",
+            "reservation_id": reservation_id,
+            "payment_id": payment_id,
+            "reallocation_triggered": reallocation_success
+        }), 200
+    except Exception as e:
+        print(f"Error triggering notification or reallocation: {str(e)}")
+        return jsonify({"error": f"Error triggering notification or reallocation: {str(e)}"}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5010))

@@ -56,6 +56,23 @@ export const getUserReservations = async (userId) => {
   }
 };
 
+// Get user waitlist entries from waitlist microservice
+export const getUserWaitlist = async (userId) => {
+  try {
+    if (!userId) return [];
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_GATEWAY_URL}/api/waitlist/user/${userId}`, { headers });
+    const data = await response.json();
+    if (data.code === 200) {
+      return data.data.waitlist || [];
+    }
+    return [];
+  } catch (error) {
+    console.error('Error fetching user waitlist:', error);
+    return [];
+  }
+};
+
 // Check for pending reservations (status = 'Pending')
 export const checkPendingReservations = async (userId) => {
   try {
@@ -148,5 +165,43 @@ export const acceptReallocation = async (acceptData) => {
   } catch (error) {
     console.error('Error accepting reallocation:', error);
     throw error;
+  }
+};
+
+// Decline/Cancel a reallocation (give to next customer in waitlist)
+export const cancelReallocation = async (reservationId) => {
+  try {
+    if (!reservationId) {
+      throw new Error('Reservation ID is required');
+    }
+
+    const headers = await getAuthHeaders();
+
+    console.log(`Sending reallocation decline request to: ${API_GATEWAY_URL}${ACCEPT_REALLOCATION_PATH}/decline/${reservationId}`);
+
+    const response = await fetch(`${API_GATEWAY_URL}${ACCEPT_REALLOCATION_PATH}/decline/${reservationId}`, {
+      method: 'POST',
+      headers
+    });
+
+    const data = await response.json();
+    console.log('Reallocation decline API response:', data);
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to decline reallocated reservation');
+    }
+
+    return {
+      success: true,
+      message: data.message || 'Reallocated reservation declined successfully',
+      data: data
+    };
+  } catch (error) {
+    console.error('Error declining reallocated reservation:', error);
+    return {
+      success: false,
+      message: error.message || 'An error occurred during reallocation decline',
+      error: error
+    };
   }
 };

@@ -22,6 +22,7 @@ USER_SERVICE_URL = os.environ.get("USER_SERVICE_URL", "http://user-service:5000"
 RESTAURANT_SERVICE_URL = os.environ.get("RESTAURANT_SERVICE_URL", "http://restaurant-service:5000")
 ORDER_SERVICE_URL = os.environ.get("ORDER_SERVICE_URL", "http://order-service:5000")
 RESERVATION_SERVICE_URL = os.environ.get("RESERVATION_SERVICE_URL", "http://reservation-service:5000")
+WAITLIST_SERVICE_URL = os.environ.get("WAITLIST_SERVICE_URL", "http://waitlist-service:5000")
 
 app = Flask(__name__)
 # Allow CORS for all origins
@@ -217,22 +218,29 @@ def create_booking():
         capacity_data = capacity_response.json()
         restaurant_capacity = capacity_data.get("data", {}).get("capacity", 0)
         
-        # We need to count only dine-in orders against capacity
-        # First, get all orders with order_type = "dine_in" for this restaurant
-        dine_in_orders_response = requests.get(
-            f"{ORDER_SERVICE_URL}/api/orders/restaurant/{restaurant_id}/type/dine_in"
+        # Count only ACTIVE reservations with status="Booked" (not all orders)
+        # This fixes the critical bug where all historical orders were counted
+        active_reservations_response = requests.get(
+            f"{RESERVATION_SERVICE_URL}/api/reservations/restaurant/{restaurant_id}/active"
         )
-        
-        dine_in_count = 0
-        if dine_in_orders_response.ok:
-            orders_data = dine_in_orders_response.json()
-            dine_in_orders = orders_data.get("data", {}).get("orders", [])
-            dine_in_count = len(dine_in_orders)
+
+        current_reservations = 0
+        if active_reservations_response.ok:
+            reservations_data = active_reservations_response.json()
+            active_reservations = reservations_data.get("data", {}).get("reservations", [])
+            current_reservations = len(active_reservations)
         else:
-            print(f"Warning: Failed to retrieve dine-in orders: {dine_in_orders_response.text}")
-        
-        # Use dine_in_count instead of current_reservations
-        current_reservations = dine_in_count
+            # Fallback: if endpoint doesn't exist, try to get all reservations and filter
+            print(f"Warning: Active reservations endpoint failed, using fallback")
+            all_reservations_response = requests.get(
+                f"{RESERVATION_SERVICE_URL}/api/reservations/restaurant/{restaurant_id}"
+            )
+            if all_reservations_response.ok:
+                all_data = all_reservations_response.json()
+                all_reservations = all_data.get("data", {}).get("reservations", [])
+                # Count only reservations with status "Booked"
+                current_reservations = sum(1 for r in all_reservations if r.get("status") == "Booked")
+
         available_slots = max(0, restaurant_capacity - current_reservations)
         
         print(f"Restaurant capacity: {restaurant_capacity}, Current dine-in reservations: {current_reservations}")
@@ -268,17 +276,15 @@ def create_booking():
         if current_reservations >= restaurant_capacity:
             print(f"Restaurant at capacity. Adding user to waitlist.")
             
-            # Add user to waitlist via OutSystems API
-            current_time = datetime.now().isoformat()
+            # Add user to waitlist via Waitlist Service
             waitlist_data = {
                 "user_id": user_id,
-                "time": current_time,
                 "restaurant_id": restaurant_id
             }
-            
+
             try:
                 waitlist_response = requests.post(
-                    "https://qks.outsystemscloud.com/Waitlist_Service/rest/waitlist/addUser",
+                    f"{WAITLIST_SERVICE_URL}/api/waitlist/addUser",
                     json=waitlist_data
                 )
                 
@@ -339,6 +345,18 @@ def create_booking():
         
         if not reservation_response.ok:
             error_data = reservation_response.json()
+            # ROLLBACK: Delete the order since reservation failed
+            # This prevents orphaned orders (order exists but no reservation)
+            try:
+                print(f"Rolling back order {order_id} due to reservation failure...")
+                rollback_response = requests.delete(f"{ORDER_SERVICE_URL}/api/orders/{order_id}")
+                if rollback_response.ok:
+                    print(f"Successfully rolled back order {order_id}")
+                else:
+                    print(f"Warning: Failed to rollback order {order_id}: {rollback_response.text}")
+            except Exception as rollback_error:
+                print(f"Warning: Exception during order rollback: {rollback_error}")
+
             return jsonify({
                 "error": f"Failed to create reservation: {error_data.get('message', reservation_response.status_code)}"
             }), reservation_response.status_code

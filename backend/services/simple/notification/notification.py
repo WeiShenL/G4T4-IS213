@@ -7,7 +7,7 @@ import logging
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
-from twilio.rest import Client
+import resend
 from datetime import datetime
 from supabase import create_client, Client as SupabaseClient
 
@@ -30,6 +30,7 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "service": "notification-service",
+        "provider": "resend",
         "timestamp": datetime.now().isoformat()
     }), 200
     
@@ -38,13 +39,25 @@ supabase_url = os.getenv('SUPABASE_URL')
 supabase_key = os.getenv('SUPABASE_KEY')
 supabase = create_client(supabase_url, supabase_key)
 
-# Twilio configuration
-TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
-TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
-TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
+# Resend Email Configuration
+RESEND_API_KEY = os.getenv('RESEND_API_KEY')
+SENDER_EMAIL = os.getenv('SENDER_EMAIL', 'onboarding@resend.dev')
+if RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
 
-# Twilio client
-client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+# Subject line mappings for events
+EVENT_SUBJECTS = {
+    "reservation.confirmation": "Your FeastFinder Reservation is Confirmed!",
+    "waitlist.notification": "You're on the Waitlist - FeastFinder",
+    "reservation.cancellation": "Reservation Cancellation Notice - FeastFinder",
+    "reservation.decline": "Table Offer Declined - FeastFinder",
+    "reallocation.notice": "Table Available - FeastFinder",
+    "reallocation.confirmation": "Reallocation Confirmed - FeastFinder",
+    "delivery.order.confirmation": "Order Confirmation - FeastFinder",
+    "delivery.order.accepted": "Driver Assigned to Your Order - FeastFinder",
+    "delivery.order.pickedup": "Order Picked Up - FeastFinder",
+    "delivery.order.delivered": "Order Delivered - FeastFinder"
+}
 
 # Message templates for different event types
 MESSAGE_TEMPLATES = {
@@ -54,6 +67,7 @@ MESSAGE_TEMPLATES = {
 
     #US2
     "reservation.cancellation": "Hi there {username}! Your reservation (ID: {reservation_id}) has been canceled and a refund of ${refund_amount} has been processed. We look forward to seeing you again! Thank you!",
+    "reservation.decline": "Hi there {username}! You have declined the table offer for Table {table_no}. A refund of ${refund_amount} has been processed if applicable. Thank you!",
     "reallocation.notice": "Hi there {username}! Table {table_no} is currently open, would you like to book it? If so, please click on this link: http://localhost:5173 to start the booking process!",
     "reallocation.confirmation": "Hi {username}, your reservation (ID: {reservation_id}) for Table {table_no} has been confirmed for {booking_time}. Thank you!",
     
@@ -64,39 +78,38 @@ MESSAGE_TEMPLATES = {
     "delivery.order.delivered": "Hello {customer_name}! Your order (ID: {order_id}) has been delivered. Thank you for your purchase and we hope to see you soon!"
 }
 
-# Sends an SMS via Twilio
-def send_sms(phone, message):
+# Sends an email via Resend API
+def send_email(to_email, subject, message):
     try:
-        # change to string
-        phone_str = str(phone)
-        
-        # remove any funny characters
-        digits_only = ''.join(char for char in phone_str if char.isdigit())
-        
-        # only digits
-        if not digits_only:
-            raise ValueError(f"Invalid phone number: {phone_str} contains no digits")
+        if not RESEND_API_KEY:
+            logging.warning("RESEND_API_KEY is not set. Email notification logged locally.")
+            return {"status": "skipped", "reason": "No RESEND_API_KEY configured"}
             
-        # add back +
-        formatted_phone = f"+{digits_only}"
-            
-        # send via Twilio
-        sms = client.messages.create(
-            body=message,
-            from_=TWILIO_PHONE_NUMBER,
-            to=formatted_phone
-        )
+        params = {
+            "from": SENDER_EMAIL,
+            "to": [to_email],
+            "subject": subject,
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; border: 1px solid #eee; border-radius: 8px;">
+                <h2 style="color: #e63946; margin-bottom: 16px;">FeastFinder</h2>
+                <p style="font-size: 16px; line-height: 1.5; color: #333;">{message}</p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+                <p style="font-size: 12px; color: #888;">Thank you for using FeastFinder!</p>
+            </div>
+            """
+        }
         
-        logging.info(f"SMS sent successfully to {phone} (SID: {sms.sid})")
-        return {"status": "success", "twilio_sid": sms.sid}
+        email_res = resend.Emails.send(params)
+        email_id = email_res.get("id") if isinstance(email_res, dict) else getattr(email_res, "id", str(email_res))
+        logging.info(f"Email sent successfully to {to_email} (ID: {email_id})")
+        return {"status": "success", "email_id": email_id}
     except Exception as e:
-        logging.error(f"Failed to send SMS to {phone}: {e}")
+        logging.error(f"Failed to send email to {to_email}: {e}")
         return {"status": "failed", "error": str(e)}
 
 # Save the notification to DB
 def save_notification_to_db(message, msg_type, status):
     try:
-        #Specify the data that is to be saved into DB
         notification_data = {
             "message": message,
             "status": status,
@@ -119,14 +132,14 @@ def rabbitmq_callback(ch, method, properties, body):
         data = json.loads(body)
         
         msg_type = data.get("message_type")
-        user_phone = data.get("user_phone")
+        recipient_email = os.getenv("DEFAULT_RECIPIENT_EMAIL") or data.get("user_email") or data.get("customer_email") or data.get("email") or "delivered@resend.dev"
         table_no = data.get("table_no", "N/A")
         username = data.get("user_name", "there")
         reservation_id = data.get("reservation_id", "N/A")
         refund_amount = data.get("refund_amount", "N/A")
         restaurant_name = data.get("restaurant_name", "The restaurant")
         booking_time = data.get("booking_time", "N/A")
-        order_id= data.get("order_id", "N/A")
+        order_id = data.get("order_id", "N/A")
 
         driver_name = data.get("driver_name", "Driver") 
         customer_name = data.get("customer_name", "Customer") 
@@ -135,13 +148,12 @@ def rabbitmq_callback(ch, method, properties, body):
         if booking_time != "N/A" and booking_time:
             try:
                 booking_dt = datetime.fromisoformat(booking_time.replace('Z', '+00:00'))
-                # Format as a readable date/time
                 booking_time = booking_dt.strftime("%A, %B %d, %Y at %I:%M %p")
             except Exception as e:
                 logging.warning(f"Could not format booking time: {e}")
 
-        if not user_phone or not msg_type:
-            logging.warning("Missing required fields in RabbitMQ message")
+        if not msg_type:
+            logging.warning("Missing message_type in RabbitMQ message")
             return
 
         # Format the message based on the event type
@@ -149,26 +161,29 @@ def rabbitmq_callback(ch, method, properties, body):
         formatted_message = message_template.format(
             username=username,
             reservation_id=reservation_id,
-            order_id= order_id,
+            order_id=order_id,
             refund_amount=refund_amount,
             table_no=table_no,
             restaurant_name=restaurant_name,
             booking_time=booking_time,
-
             driver_name=driver_name,  
             customer_name=customer_name,  
         )
 
-        logging.info(f"Processing {msg_type} event...")
-        sms_result = send_sms(user_phone, formatted_message)
+        subject = EVENT_SUBJECTS.get(msg_type, f"FeastFinder Notification - {msg_type}")
+
+        logging.info(f"Processing {msg_type} event for {recipient_email}...")
+        email_result = send_email(recipient_email, subject, formatted_message)
 
         # Save the notification to the database
-        save_notification_to_db(formatted_message, msg_type, sms_result["status"] == "success")
+        save_notification_to_db(formatted_message, msg_type, email_result["status"] in ["success", "skipped"])
 
-        if sms_result["status"] == "success":
-            logging.info(f"Notification sent successfully for {msg_type}")
+        if email_result["status"] == "success":
+            logging.info(f"Email sent successfully for {msg_type}")
+        elif email_result["status"] == "skipped":
+            logging.info(f"Email sending skipped (no RESEND_API_KEY set) for {msg_type}")
         else:
-            logging.error(f"Failed to send notification for {msg_type}: {sms_result.get('error')}")
+            logging.error(f"Failed to send email for {msg_type}: {email_result.get('error')}")
     except Exception as e:
         logging.error(f"Error processing RabbitMQ message: {e}")
 
@@ -213,6 +228,7 @@ def start_rabbitmq_consumer():
                 "Order_Confirmation": "order.confirmation",
                 "Reservation_Confirmation": "reservation.confirmation",
                 "Reservation_Cancellation": "reservation.cancellation",
+                "Reservation_Decline": "reservation.decline",
                 "Reallocation_Notice": "reallocation.notice",
                 "Reallocation_Confirmation": "reallocation.confirmation",
                 "Waitlist_Notification": "waitlist.notification",

@@ -4,6 +4,12 @@ volumes:
   pgdata:
     name: kong_pgdata
 
+# ===========================================
+# IMPORTANT: Start Supabase FIRST before this stack
+# cd supabase && docker-compose up -d
+# Then: docker-compose up -d
+# ===========================================
+
 services:
   #######################################
   # Postgres: The database used by Kong
@@ -121,7 +127,7 @@ services:
   menu-service:
     build: ./services/simple/menu
     deploy:
-      replicas: 2
+      replicas: 1
       restart_policy:
         condition: on-failure
     environment:
@@ -133,6 +139,7 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   reservation-service:
     build: ./services/simple/reservation
@@ -145,11 +152,12 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   order-service:
     build: ./services/simple/order
     deploy:
-      replicas: 2
+      replicas: 1
       restart_policy:
         condition: on-failure
     environment:
@@ -161,11 +169,12 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   restaurant-service:
     build: ./services/simple/restaurant
     deploy:
-      replicas: 2
+      replicas: 1
       restart_policy:
         condition: on-failure
     environment:
@@ -177,6 +186,7 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   user-service:
     build: ./services/simple/user
@@ -189,6 +199,7 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   notification-service:
     build: ./services/simple/notification
@@ -206,6 +217,7 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   payment-service:
     build: ./services/simple/payment
@@ -218,11 +230,25 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
+
+  waitlist-service:
+    build: ./services/simple/waitlist
+    environment:
+      - PORT=5000
+    env_file:
+      - .env
+    ports:
+      - "5016:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
 
   create-booking-service:
     build: ./services/complex/create_booking
     deploy:
-      replicas: 2
+      replicas: 1
       restart_policy:
         condition: on-failure
     depends_on:
@@ -260,6 +286,7 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   # User Scenario 2 Services are hereeee (composites)
   
@@ -293,11 +320,12 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   cancel-booking-service:
     build: ./services/complex/cancel_booking
     deploy:
-      replicas: 2
+      replicas: 1
       restart_policy:
         condition: on-failure
     depends_on:
@@ -328,6 +356,7 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   reallocate-reservation-service:
     build: ./services/complex/reallocate_reservation
@@ -354,6 +383,7 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   # User Scenario 3 Services
   driver-service:
@@ -367,6 +397,7 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   driver-details-service:
     build: ./services/simple/driver_details
@@ -379,6 +410,7 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   geo-service:
     build: ./services/simple/geo
@@ -391,6 +423,7 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   driver-status-service:
     build: ./services/complex/driver_status
@@ -420,6 +453,7 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
   dms-service:
     build: ./services/complex/dms
@@ -451,7 +485,12 @@ services:
     restart: on-failure
     networks:
       - feastfinder-network
+      - supabase-network
 
 networks:
   feastfinder-network:
-    driver: bridge 
+    driver: bridge
+  # Connect to Supabase network (must be started first)
+  supabase-network:
+    external: true
+    name: supabase-network

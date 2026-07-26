@@ -16,7 +16,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 print(f"Stripe API configured with key: {stripe.api_key[:5]}...")
 webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
-print(f"Webhook secret configured: {webhook_secret[:5]}...")
+print(f"Webhook secret configured: {webhook_secret[:5]}..." if webhook_secret else "Webhook secret not configured (Stripe webhooks disabled)")
 
 # Database connection
 supabase_url = os.getenv('SUPABASE_URL')
@@ -31,35 +31,66 @@ def health_check():
         "timestamp": datetime.now().isoformat()
     }), 200
     
-# Process a refund
+# Process a refund with idempotency check
 @app.route("/api/payment/refund", methods=['POST'])
 def process_refund():
     try:
         data = request.json
         payment_id = data.get('payment_id')
-        amount = data.get('amount')  
-        
+        amount = data.get('amount')
+
         if not payment_id:
             return jsonify({
                 "code": 400,
                 "message": "Payment ID is required"
             }), 400
-        
+
+        # IDEMPOTENCY CHECK: Check if this payment has already been refunded
+        existing_payment = supabase.table('payments').select('*').eq('stripe_payment_id', payment_id).execute()
+
+        if existing_payment.data:
+            payment_record = existing_payment.data[0]
+            if payment_record.get('status') == 'refunded':
+                print(f"Payment {payment_id} has already been refunded. Returning cached result.")
+                return jsonify({
+                    "code": 200,
+                    "refund": {
+                        "id": f"cached_refund_{payment_id}",
+                        "amount": int(payment_record.get('amount', 0) * 100),  # Convert back to cents
+                        "status": "succeeded"
+                    },
+                    "message": "Refund was already processed (idempotent response)"
+                })
+
         # Process the refund through Stripe
         refund_params = {
             "payment_intent": payment_id,
         }
-        
+
         # Add amount if provided
         if amount:
             refund_params["amount"] = int(amount)
-        
+
         print(f"Processing refund for payment intent: {payment_id}")
-        
+
         refund = stripe.Refund.create(**refund_params)
-        
+
         print(f"Refund processed: {refund.id}")
-        
+
+        # Update payment status to 'refunded' in database for idempotency
+        if existing_payment.data:
+            supabase.table('payments').update({
+                'status': 'refunded'
+            }).eq('stripe_payment_id', payment_id).execute()
+        else:
+            # If no record exists, create one with refunded status
+            supabase.table('payments').insert({
+                'stripe_payment_id': payment_id,
+                'amount': refund.amount / 100,
+                'status': 'refunded',
+                'created_at': datetime.now().isoformat()
+            }).execute()
+
         return jsonify({
             "code": 200,
             "refund": {
@@ -68,7 +99,34 @@ def process_refund():
                 "status": refund.status
             }
         })
-    
+
+    except stripe.error.InvalidRequestError as e:
+        # Handle Stripe-specific errors (e.g., already refunded)
+        error_message = str(e)
+        print(f"Stripe error processing refund: {error_message}")
+
+        if "has already been refunded" in error_message.lower():
+            # Mark as refunded in our database
+            if payment_id:
+                supabase.table('payments').update({
+                    'status': 'refunded'
+                }).eq('stripe_payment_id', payment_id).execute()
+
+            return jsonify({
+                "code": 200,
+                "refund": {
+                    "id": f"already_refunded_{payment_id}",
+                    "amount": 0,
+                    "status": "succeeded"
+                },
+                "message": "Payment was already refunded through Stripe"
+            })
+
+        return jsonify({
+            "code": 400,
+            "message": f"Stripe error: {error_message}"
+        }), 400
+
     except Exception as e:
         print(f"Error processing refund: {str(e)}")
         return jsonify({
@@ -188,10 +246,14 @@ def verify_payment(session_id):
         })
     
     except Exception as e:
-        print(f"Error verifying payment: {str(e)}")
+        import traceback
+        tb = traceback.format_exc()
+        print(f"Error verifying payment: {type(e).__name__}: {str(e)!r}", flush=True)
+        print(tb, flush=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": f"{type(e).__name__}: {str(e)}",
+            "trace": tb.splitlines()[-3:],
         }), 500
 
 if __name__ == '__main__':

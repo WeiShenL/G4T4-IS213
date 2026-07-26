@@ -60,6 +60,19 @@
           <h4 v-else class="alert-heading">Reservation & Pre-Order Placed Successfully!</h4>
           <p v-if="orderType === 'delivery'">Your food order has been placed and will be delivered to your address. Thank you!</p>
           <p v-else>Your table has been reserved and your food pre-order has been placed. Thank you!</p>
+          
+          <!-- Resend Email Notification Banner -->
+          <div class="alert alert-info border-0 shadow-sm mt-3 bg-light text-dark">
+            <div class="d-flex align-items-center mb-1">
+              <i class="fas fa-paper-plane text-primary me-2 fs-5"></i>
+              <strong v-if="orderType === 'delivery'">Delivery Order Confirmed Email Dispatched!</strong>
+              <strong v-else>Reservation Confirmed Email Dispatched!</strong>
+            </div>
+            <small class="text-muted d-block">
+              An automated confirmation email has been dispatched via Resend API. 
+              <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to the developer's testing inbox).</em>
+            </small>
+          </div>
           <hr>
           <p class="mb-0">Payment ID: {{ paymentId }}</p>
           <div class="mt-3">
@@ -77,6 +90,18 @@
           <h4 class="alert-heading">Added to Waitlist!</h4>
           <p>The restaurant is currently at full capacity. We've added you to the waitlist and will notify you when a table becomes available.</p>
           <p>Your order has been processed as "dine-in(pending)" and will be confirmed once a table is available.</p>
+
+          <!-- Resend Email Notification Banner -->
+          <div class="alert alert-info border-0 shadow-sm mt-3 bg-light text-dark">
+            <div class="d-flex align-items-center mb-1">
+              <i class="fas fa-paper-plane text-warning me-2 fs-5"></i>
+              <strong>Waitlist Notification Email Dispatched!</strong>
+            </div>
+            <small class="text-muted d-block">
+              A waitlist notification email has been dispatched via Resend API. 
+              <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to the developer's testing inbox).</em>
+            </small>
+          </div>
           <hr>
           <p class="mb-0">Payment ID: {{ paymentId }}</p>
           <div class="mt-3">

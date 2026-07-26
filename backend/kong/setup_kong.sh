@@ -168,6 +168,17 @@ curl -s -X POST http://kong:8001/services/geo/routes \
   --data paths=/api/delete-geospatial \
   --data strip_path=false > /dev/null
 
+# Waitlist Service
+echo "Setting up Waitlist Service..."
+curl -s -X POST http://kong:8001/services \
+  --data name=waitlist \
+  --data url=http://waitlist-service:5000 > /dev/null
+
+curl -s -X POST http://kong:8001/services/waitlist/routes \
+  --data name=waitlist-all-route \
+  --data paths=/api/waitlist \
+  --data strip_path=false > /dev/null
+
 
 # Complex Services
 echo "Setting up complex services..."

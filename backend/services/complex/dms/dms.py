@@ -17,12 +17,17 @@ RESTAURANT_SERVICE_URL = os.getenv('RESTAURANT_SERVICE_URL', 'http://restaurant-
 DRIVERDETAIL_SERVICE_URL = os.getenv('DRIVERDETAIL_SERVICE_URL', 'http://driver-details-service:5000')
 GEOCODING_SERVICE_URL = os.getenv('GEOCODING_SERVICE_URL', 'http://geo-service:5000')
 
+# Never let a single unresponsive dependency hang this endpoint indefinitely.
+# The geocoding fan-out is inherently slower than a plain lookup, so it gets its own budget.
+SERVICE_TIMEOUT = int(os.getenv('SERVICE_TIMEOUT', '10'))
+GEO_TIMEOUT = int(os.getenv('GEO_TIMEOUT', '60'))
+
 def get_driver_address(driver_id):
     #Fetch the driver's address from the DRIVER_SERVICE_URL.
     #:param driver_id: The ID of the driver.
     #:return: The driver's address (string) or None if not found.
     try:
-        driver_response = requests.get(f"{DRIVER_SERVICE_URL}/api/driver/{driver_id}")
+        driver_response = requests.get(f"{DRIVER_SERVICE_URL}/api/driver/{driver_id}", timeout=SERVICE_TIMEOUT)
         if driver_response.status_code == 200:
             driver_data = driver_response.json().get("data", {})
             return driver_data.get("street_address", None)  # key for the driver's address
@@ -50,13 +55,13 @@ def get_delivery_management_data():
             return jsonify({"code": 400, "message": "Missing driver_id."}), 400
 
         # Fetch the logged-in driver's details
-        driver_response = requests.get(f"{DRIVER_SERVICE_URL}/api/driver/{driver_id}")
+        driver_response = requests.get(f"{DRIVER_SERVICE_URL}/api/driver/{driver_id}", timeout=SERVICE_TIMEOUT)
         if driver_response.status_code != 200:
             return jsonify({"code": 404, "message": "Driver not found."}), 404
         driver_data = driver_response.json().get("data", {})
 
         # Fetch all delivery orders (regardless of driver assignment)
-        order_response = requests.get(f"{ORDER_SERVICE_URL}/api/orders/type/delivery")
+        order_response = requests.get(f"{ORDER_SERVICE_URL}/api/orders/type/delivery", timeout=SERVICE_TIMEOUT)
         if order_response.status_code != 200:
             return jsonify({"code": 500, "message": "Failed to fetch delivery orders."}), 500
         delivery_orders = order_response.json().get("data", {}).get("orders", [])
@@ -77,6 +82,7 @@ def get_delivery_management_data():
 
         # Group orders by restaurant
         restaurants = {}  # Key: restaurant_id, Value: {restaurant details + orders}
+        customers = {}    # Key: customer_id, Value: customer details (many orders share a customer)
 
         for order in delivery_orders:
             restaurant_id = order.get("restaurant_id")
@@ -84,7 +90,7 @@ def get_delivery_management_data():
 
             # Fetch restaurant details if not already cached
             if restaurant_id not in restaurants:
-                restaurant_resp = requests.get(f"{RESTAURANT_SERVICE_URL}/api/restaurants/{restaurant_id}")
+                restaurant_resp = requests.get(f"{RESTAURANT_SERVICE_URL}/api/restaurants/{restaurant_id}", timeout=SERVICE_TIMEOUT)
                 restaurant_data = restaurant_resp.json().get("data") if restaurant_resp.status_code == 200 else None
                 if not restaurant_data:
                     continue  # Skip invalid restaurants
@@ -96,9 +102,11 @@ def get_delivery_management_data():
                     "orders": []
                 }
 
-            # Fetch customer details
-            customer_resp = requests.get(f"{USER_SERVICE_URL}/api/user/{customer_id}")
-            customer_data = customer_resp.json().get("data") if customer_resp.status_code == 200 else None
+            # Fetch customer details if not already cached
+            if customer_id not in customers:
+                customer_resp = requests.get(f"{USER_SERVICE_URL}/api/user/{customer_id}", timeout=SERVICE_TIMEOUT)
+                customers[customer_id] = customer_resp.json().get("data") if customer_resp.status_code == 200 else None
+            customer_data = customers[customer_id]
 
             # Build order details 
             order_details = {
@@ -118,7 +126,7 @@ def get_delivery_management_data():
         restaurant_list = list(restaurants.values())
 
         # Fetch detailed driver details from the driverdetails service
-        detailed_driver_response = requests.get(f"{DRIVERDETAIL_SERVICE_URL}/api/driverdetails/{driver_id}")
+        detailed_driver_response = requests.get(f"{DRIVERDETAIL_SERVICE_URL}/api/driverdetails/{driver_id}", timeout=SERVICE_TIMEOUT)
         if detailed_driver_response.status_code == 404:  # Driver details not found, create a new record
             print(f"No driver details found for driver_id: {driver_id}. Creating a new record.")
 
@@ -133,7 +141,7 @@ def get_delivery_management_data():
                 "live_location": driver_address,
                 "availability": True
             }
-            create_response = requests.post(f"{DRIVERDETAIL_SERVICE_URL}/api/driverdetails", json=new_driver_payload)
+            create_response = requests.post(f"{DRIVERDETAIL_SERVICE_URL}/api/driverdetails", json=new_driver_payload, timeout=SERVICE_TIMEOUT)
             if create_response.status_code not in [200, 201]:
                 print(f"Error creating driver details: {create_response.status_code}, {create_response.text}")
                 return jsonify({"code": 500, "message": "Failed to create driver details."}), 500
@@ -145,9 +153,6 @@ def get_delivery_management_data():
         else:
             print(f"Error fetching driver details: {detailed_driver_response.status_code}, {detailed_driver_response.text}")
             return jsonify({"code": 500, "message": "Failed to fetch driver details."}), 500
-        
-        # Extract data from the response
-        detailed_driver_data = detailed_driver_response.json().get("data", {})
 
         # Combine driver details (basic + detailed)
 
@@ -175,7 +180,7 @@ def get_delivery_management_data():
                 "restaurants": restaurant_list
             }
         }
-        geo_response = requests.post(f"{GEOCODING_SERVICE_URL}/api/nearby-restaurants", json=geo_payload)
+        geo_response = requests.post(f"{GEOCODING_SERVICE_URL}/api/nearby-restaurants", json=geo_payload, timeout=GEO_TIMEOUT)
         if geo_response.status_code != 200:
             print(f"Error calling geocoding service: {geo_response.status_code}, {geo_response.text}")
             return jsonify({"code": 500, "message": "Failed to fetch nearby restaurants."}), 500

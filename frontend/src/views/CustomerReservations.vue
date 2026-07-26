@@ -53,6 +53,23 @@
             {{ errorMessage }}
           </div>
           
+          <!-- Cancellation Success Banner (Top of Page) -->
+          <div v-if="showTopCancellationBanner" class="alert alert-success border-0 shadow-sm mb-4" role="alert">
+            <h4 class="alert-heading mb-2"><i class="fas fa-check-circle me-2"></i>Reservation Cancelled & Refund Issued!</h4>
+            <p class="mb-2">Your booking has been cancelled and refunded via Stripe.</p>
+            
+            <div class="alert alert-info border-0 shadow-sm mt-2 mb-0 bg-light text-dark">
+              <div class="d-flex align-items-center mb-1">
+                <i class="fas fa-paper-plane text-info me-2 fs-5"></i>
+                <strong>Cancellation Notice Email Dispatched!</strong>
+              </div>
+              <small class="text-muted d-block">
+                A cancellation & refund email notification has been dispatched via Resend API. 
+                <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to the developer's testing inbox).</em>
+              </small>
+            </div>
+          </div>
+          
           <!-- Reservations Table -->
           <div v-if="!isLoading && reservations.length > 0" class="card mb-4">
             <div class="card-body">
@@ -141,6 +158,18 @@
               </div>
               <h4 class="text-success">Cancellation Successful!</h4>
               <p>Your reservation has been cancelled and your refund is being processed.</p>
+              
+              <!-- Resend Email Notification Banner -->
+              <div class="alert alert-info border-0 shadow-sm mt-3 bg-light text-dark text-start">
+                <div class="d-flex align-items-center mb-1">
+                  <i class="fas fa-paper-plane text-info me-2 fs-5"></i>
+                  <strong>Cancellation Notice Email Dispatched!</strong>
+                </div>
+                <small class="text-muted d-block">
+                  A cancellation & refund email notification has been dispatched via Resend API. 
+                  <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to the developer's testing inbox).</em>
+                </small>
+              </div>
             </div>
             
             <!-- Error State -->
@@ -173,7 +202,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'; 
 import { useRouter } from 'vue-router';
 import { supabaseClient, signOut, getCurrentUser } from '@/services/supabase';
-import { getUserReservations } from '@/services/reservationService';
+import { getUserReservations, getUserWaitlist } from '@/services/reservationService';
 import { getAllRestaurants } from '@/services/restaurantService';
 import { initStripe, processRefund } from '@/services/stripeService';
 import { Modal } from 'bootstrap'; 
@@ -184,6 +213,7 @@ const CANCEL_BOOKING_PATH = '/api/cancel';
 export default {
   name: 'CustomerReservations',
   setup() {
+    // Setup CustomerReservations component state
     const router = useRouter();
     const user = ref(null);
     const reservations = ref([]);
@@ -195,6 +225,7 @@ export default {
     const isProcessingCancellation = ref(false);
     const cancellationSuccess = ref(false);
     const cancellationError = ref('');
+    const showTopCancellationBanner = ref(false);
 
     // toggle dropdown manually
     const toggleDropdown = (event) => {
@@ -287,24 +318,37 @@ export default {
       }
     };
     
-    // Load user's reservations
+    // Load user's reservations and waitlist entries in parallel (API Composition)
     const loadReservations = async () => {
       try {
         if (!user.value || !user.value.id) {
           console.warn('User ID not available yet, skipping reservation loading');
-          return; // Skip loading if user ID is not available yet
+          return;
         }
         
-        console.log('Loading reservations for user ID:', user.value.id);
+        console.log('Loading reservations & waitlist for user ID:', user.value.id);
         
-        const userReservations = await getUserReservations(user.value.id.toString());
-        reservations.value = userReservations;
+        const [userReservations, userWaitlist] = await Promise.all([
+          getUserReservations(user.value.id.toString()).catch(() => []),
+          getUserWaitlist(user.value.id.toString()).catch(() => [])
+        ]);
+
+        const formattedWaitlist = (userWaitlist || []).map(item => ({
+          reservation_id: `w-${item.Id || item.waitlist_id}`,
+          restaurant_id: item.restaurant_id,
+          time: item.time || item.timestamp_added,
+          count: 1,
+          table_no: 'Waitlist Queue',
+          price: 0,
+          status: 'Waitlisted',
+          isWaitlist: true
+        }));
         
-        console.log('Loaded reservations:', reservations.value);
+        reservations.value = [...(userReservations || []), ...formattedWaitlist];
+        console.log('Loaded merged reservations & waitlist:', reservations.value);
       } catch (error) {
         console.error('Error loading reservations:', error);
         errorMessage.value = 'Failed to load your reservations. Please try again later.';
-        // Don't throw the error, just handle it here
       }
     };
 
@@ -336,6 +380,8 @@ export default {
           return 'bg-primary';
         case 'Confirmed':
           return 'bg-success';
+        case 'Waitlisted':
+          return 'bg-warning text-dark';
         case 'Cancelled':
           return 'bg-danger';
         case 'Completed':
@@ -395,20 +441,12 @@ export default {
         const data = await response.json();
         console.log('Cancellation response:', data);
         
-        // If there's a payment_id, process the refund through Stripe
-        if (data.payment_id) {
-          try {
-            console.log('Processing refund for payment:', data.payment_id);
-            const refundResponse = await processRefund(data.payment_id);
-            console.log('Refund processed:', refundResponse);
-          } catch (refundError) {
-            console.error('Error processing refund:', refundError);
-            // Continue with cancellation even if refund fails
-          }
-        }
+        // Note: cancel_booking microservice already executed the Stripe refund atomically on the backend.
+        console.log('Cancellation & refund completed successfully by microservice:', data);
         
         // Update UI to show success
         cancellationSuccess.value = true;
+        showTopCancellationBanner.value = true;
         
         // Hide modal after a short delay
         setTimeout(() => {
@@ -461,6 +499,7 @@ export default {
       isProcessingCancellation,
       cancellationSuccess,
       cancellationError,
+      showTopCancellationBanner,
       formatDate,
       formatTime,
       getRestaurantName,

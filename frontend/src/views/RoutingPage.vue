@@ -7,9 +7,9 @@
           <router-link to="/driver-dashboard" class="dashboard-logo">
             <span>FeastFinder</span>
           </router-link>
-          <div class="dashboard-user">
+          <div class="dashboard-user d-flex align-items-center">
             <div class="dropdown">
-              <button class="btn dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+              <button class="btn dropdown-toggle" type="button" id="userDropdown" @click="toggleDropdown">
                 <i class="fas fa-user-circle"></i>
                 <span v-if="routingData">{{ routingData.driver.name }}</span>
                 <span v-else>Loading...</span>
@@ -158,6 +158,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { loadGoogleMapsApi } from '@/services/googleMapsLoader';
+import { signOut } from '@/services/supabase';
 
 const API_GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8000';
 const ACCEPT_ORDER_PATH = '/api/accept-order';
@@ -492,6 +493,22 @@ export default {
     });
 
 
+    const toggleDropdown = (event) => {
+      const dropdownMenu = event.target.closest('.dropdown').querySelector('.dropdown-menu');
+      dropdownMenu.classList.toggle('show');
+    };
+
+    const logout = async () => {
+      try {
+        const { error } = await signOut();
+        if (error) throw error;
+        router.push('/');
+      } catch (error) {
+        console.error('Logout error:', error);
+        errorMessage.value = 'Failed to log out. Please try again.';
+      }
+    };
+
     return {
       routingData,
       errorMessage,
@@ -506,7 +523,9 @@ export default {
       pickedUp,
       orderCompleted,
       goHome,
-      
+      logout,
+      toggleDropdown,
+
     };
   },
 };
