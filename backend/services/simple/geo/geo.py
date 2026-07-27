@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 import os
 from dotenv import load_dotenv
 from supabase import create_client
@@ -8,11 +9,25 @@ import requests
 import time
 from datetime import datetime
 
+import logging
+
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 
-CORS(app, resources={r"/*": {"origins": "*"}})
+@app.errorhandler(Exception)
+def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
+
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+if allowed_origins != "*":
+    allowed_origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
+CORS(app, resources={r"/*": {"origins": allowed_origins, "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"]}})
 
 # Configure Supabase client
 SUPABASE_URL = os.getenv('SUPABASE_URL')
@@ -283,10 +298,10 @@ def delete_geospatial(order_id):
         }), 200
 
     except Exception as e:
-        print(f"Error during geospatial deletion: {str(e)}")
+        app.logger.error("Error during geospatial deletion: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
     
 # Main entry point

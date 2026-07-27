@@ -1,0 +1,53 @@
+name: Automated GitHub Release
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract Dynamic Release Version Tag
+        id: vars
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            # Fetch latest git tag (defaults to v1.0.0 if none)
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+            # Parse SemVer vX.Y.Z and auto-increment patch digit Z (e.g. v1.0.0 -> v1.0.1)
+            VERSION_NUM="${LATEST_TAG#v}"
+            MAJOR_MINOR=$(echo "$VERSION_NUM" | awk -F. '{print $1"."$2}')
+            CURRENT_PATCH=$(echo "$VERSION_NUM" | awk -F. '{print $3}')
+            NEXT_PATCH=$((CURRENT_PATCH + 1))
+            NEW_TAG="v${MAJOR_MINOR}.${NEXT_PATCH}"
+            echo "TAG_NAME=${NEW_TAG}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Dynamic GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.TAG_NAME }}
+          name: "Release ${{ steps.vars.outputs.TAG_NAME }}"
+          body: |
+            ${{ github.event.pull_request.title && format('# 📌 {0}', github.event.pull_request.title) || '' }}
+
+            ${{ github.event.pull_request.body || '' }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,14 +1,29 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 import os
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from datetime import datetime
+import logging
+
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 
-CORS(app, resources={r"/*": {"origins": "*"}})
+@app.errorhandler(Exception)
+def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
+
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+if allowed_origins != "*":
+    allowed_origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
+CORS(app, resources={r"/*": {"origins": allowed_origins, "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"]}})
 
 # Database connection
 supabase_url = os.getenv('SUPABASE_URL')
@@ -42,9 +57,10 @@ def get_restaurant_menu(restaurant_id):
             "message": f"No menu items found for restaurant ID: {restaurant_id}"
         }), 404
     except Exception as e:
+        app.logger.error("Error in get_restaurant_menu: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 # get a specific menu item by ID --> NOT USED AS OF NOW
@@ -64,9 +80,10 @@ def get_menu_item(menu_id):
             "message": f"Menu item not found with ID: {menu_id}"
         }), 404
     except Exception as e:
+        app.logger.error("Error in get_menu_item: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 if __name__ == '__main__':

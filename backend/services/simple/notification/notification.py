@@ -4,12 +4,14 @@ import threading
 import pika
 import time
 import logging
+import html
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
 import resend
 from datetime import datetime
 from supabase import create_client, Client as SupabaseClient
+from werkzeug.exceptions import HTTPException
 
 # Load environment variables
 load_dotenv()
@@ -21,9 +23,19 @@ RABBITMQ_EXCHANGE = "notification_topic"
 RABBITMQ_EXCHANGE_TYPE = "topic"
 
 logging.basicConfig(level=logging.INFO)
-
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
+
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+if allowed_origins != "*":
+    allowed_origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
+CORS(app, resources={r"/*": {"origins": allowed_origins, "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"]}})
 
 @app.route("/api/notification/health", methods=['GET'])
 def health_check():
@@ -85,6 +97,7 @@ def send_email(to_email, subject, message):
             logging.warning("RESEND_API_KEY is not set. Email notification logged locally.")
             return {"status": "skipped", "reason": "No RESEND_API_KEY configured"}
             
+        escaped_message = html.escape(message)
         params = {
             "from": SENDER_EMAIL,
             "to": [to_email],
@@ -92,7 +105,7 @@ def send_email(to_email, subject, message):
             "html": f"""
             <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; border: 1px solid #eee; border-radius: 8px;">
                 <h2 style="color: #e63946; margin-bottom: 16px;">FeastFinder</h2>
-                <p style="font-size: 16px; line-height: 1.5; color: #333;">{message}</p>
+                <p style="font-size: 16px; line-height: 1.5; color: #333;">{escaped_message}</p>
                 <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
                 <p style="font-size: 12px; color: #888;">Thank you for using FeastFinder!</p>
             </div>

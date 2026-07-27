@@ -1,13 +1,29 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 import os
 import requests
 from dotenv import load_dotenv
 from datetime import datetime
+import logging
+
 load_dotenv()
 
+logging.basicConfig(level=logging.INFO)
+
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
+
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+if allowed_origins != "*":
+    allowed_origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
+CORS(app, resources={r"/*": {"origins": allowed_origins, "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"]}})
 
 # Base URLs for the services
 ORDER_SERVICE_URL = os.getenv('ORDER_SERVICE_URL', 'http://order-service:5000')
@@ -62,11 +78,15 @@ def get_delivery_management_data():
 
         # Fetch all delivery orders (regardless of driver assignment)
         order_response = requests.get(f"{ORDER_SERVICE_URL}/api/orders/type/delivery", timeout=SERVICE_TIMEOUT)
-        if order_response.status_code != 200:
+        if order_response.status_code == 404:
+            delivery_orders = []
+        elif order_response.status_code != 200:
             return jsonify({"code": 500, "message": "Failed to fetch delivery orders."}), 500
-        delivery_orders = order_response.json().get("data", {}).get("orders", [])
+        else:
+            delivery_orders = order_response.json().get("data", {}).get("orders", [])
+
         if not delivery_orders:
-            # Return empty restaurants list with 200 status code instead of 404 error
+            # Return empty restaurants list with 200 status code instead of 500 error
             return jsonify({
                 "code": 200,
                 "data": {
@@ -189,8 +209,8 @@ def get_delivery_management_data():
         return geo_response.json()
 
     except Exception as e:
-        print(f"Error fetching delivery management data: {str(e)}")
-        return jsonify({"code": 500, "message": "An error occurred while fetching data."}), 500
+        app.logger.error("Error fetching delivery management data: %s", str(e), exc_info=True)
+        return jsonify({"code": 500, "message": "An internal server error occurred"}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5014))

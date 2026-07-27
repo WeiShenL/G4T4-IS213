@@ -1,8 +1,6 @@
 # Supabase Local Development Stack
 # This is a simplified self-hosted Supabase setup for local development
 
-version: '3.8'
-
 services:
   # ===========================================
   # Supabase PostgreSQL Database

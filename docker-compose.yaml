@@ -1,0 +1,24 @@
+# Unified FeastFinder Local Development Stack
+# Includes full backend microservices stack & launches Frontend with Vite Hot-Module-Reloading (HMR)
+
+include:
+  - backend/docker-compose.yaml
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+    env_file:
+      - ./frontend/.env
+    restart: always
+    networks:
+      - feastfinder-network
+    depends_on:
+      - kong

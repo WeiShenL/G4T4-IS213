@@ -1,0 +1,108 @@
+# Production Overrides for FeastFinder Stack
+# Usage: docker compose -f docker-compose.yaml -f docker-compose.prod.yml up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # Kong Postgres DB: Restrict to localhost only
+  kong-database:
+    logging: *default-logging
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  # Kong API Gateway: Public proxy on 8000, Admin ports restricted to localhost
+  kong:
+    logging: *default-logging
+    ports:
+      - "8000:8000"
+      - "127.0.0.1:8001:8001"
+      - "127.0.0.1:8002:8002"
+
+  # RabbitMQ: AMQP & Management UI restricted to localhost
+  rabbitmq:
+    logging: *default-logging
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+
+  # Microservices: Remove all host port exposure & cap log rotation
+  reservation-service:
+    logging: *default-logging
+    ports: []
+
+  user-service:
+    logging: *default-logging
+    ports: []
+
+  notification-service:
+    logging: *default-logging
+    ports: []
+
+  payment-service:
+    logging: *default-logging
+    ports: []
+
+  waitlist-service:
+    logging: *default-logging
+    ports: []
+
+  accept-reallocation-service:
+    logging: *default-logging
+    ports: []
+
+  reallocate-reservation-service:
+    logging: *default-logging
+    ports: []
+
+  driver-service:
+    logging: *default-logging
+    ports: []
+
+  driver-details-service:
+    logging: *default-logging
+    ports: []
+
+  geo-service:
+    logging: *default-logging
+    ports: []
+
+  driver-status-service:
+    logging: *default-logging
+    ports: []
+
+  dms-service:
+    logging: *default-logging
+    ports: []
+
+  create-booking-service:
+    logging: *default-logging
+    ports: []
+
+  cancel-booking-service:
+    logging: *default-logging
+    ports: []
+
+  menu-service:
+    logging: *default-logging
+    ports: []
+
+  restaurant-service:
+    logging: *default-logging
+    ports: []
+
+  order-service:
+    logging: *default-logging
+    ports: []
+
+  # Production Frontend: Build multi-stage Caddy container (zero Node.js runtime)
+  frontend:
+    logging: *default-logging
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"

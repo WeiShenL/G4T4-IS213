@@ -1,19 +1,34 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 import os
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import random
 import requests
+import logging
 
 # Configuration constants
 MAX_BOOKING_DAYS_AHEAD = 90  # Maximum days in advance a reservation can be made
 
 load_dotenv()
 
+logging.basicConfig(level=logging.INFO)
+
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
+
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+if allowed_origins != "*":
+    allowed_origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
+CORS(app, resources={r"/*": {"origins": allowed_origins, "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"]}})
 
 # Database connection
 supabase_url = os.getenv('SUPABASE_URL')
@@ -45,9 +60,10 @@ def get_reservation(reservation_id):
             "message": "Reservation not found."
         }), 404
     except Exception as e:
+        app.logger.error("Error in get_all_reservations: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 # Create a new reservation
@@ -156,9 +172,10 @@ def create_reservation():
             }), 500
     
     except Exception as e:
+        app.logger.error("Error creating reservation: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 # Delete a reservation by reservation_id
@@ -188,9 +205,10 @@ def delete_reservation(reservation_id):
             }), 500
 
     except Exception as e:
+        app.logger.error("Error deleting reservation: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 # Get all reservations by restaurant_id
@@ -207,9 +225,10 @@ def get_restaurant_reservations(restaurant_id):
             }
         })
     except Exception as e:
+        app.logger.error("Error fetching restaurant reservations: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 
@@ -229,9 +248,10 @@ def get_active_restaurant_reservations(restaurant_id):
             }
         })
     except Exception as e:
+        app.logger.error("Error fetching active reservations: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 
@@ -253,9 +273,10 @@ def get_occupied_tables(restaurant_id):
             }
         })
     except Exception as e:
+        app.logger.error("Error fetching occupied tables: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 
@@ -273,9 +294,10 @@ def get_user_reservations(user_id):
             }
         }), 200
     except Exception as e:
+        app.logger.error("Error fetching user reservations: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 @app.route('/api/reservation/cancel/<int:reservation_id>', methods=['PATCH'])
@@ -327,8 +349,9 @@ def cancel_reservation(reservation_id):
         }), 200
     
     except Exception as e:
+        app.logger.error("Error canceling reservation: %s", str(e), exc_info=True)
         return jsonify({
-            "error": f"An error occurred: {str(e)}"
+            "error": "An internal server error occurred"
         }), 500
  
  # update order_id and payment_id in the reservation
@@ -381,9 +404,10 @@ def update_reservation(reservation_id):
         }), 200
     
     except Exception as e:
+        app.logger.error("Error updating reservation: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "error": f"An error occurred: {str(e)}"
+            "error": "An internal server error occurred"
         }), 500
 
 # Confirm booking (new route for accept_booking.py)
@@ -440,9 +464,10 @@ def reallocate_confirm_booking(reservation_id):
         }), 200
 
     except Exception as e:
+        app.logger.error("Error reallocating confirm booking: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "error": f"An error occurred: {str(e)}"
+            "error": "An internal server error occurred"
         }), 500
 
 if __name__ == '__main__':

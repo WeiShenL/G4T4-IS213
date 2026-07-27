@@ -293,3 +293,56 @@ if [[ $TEST_RESPONSE == *"restaurant"* ]]; then
 else
   echo "⚠️ Warning: Could not verify restaurant service configuration."
 fi
+
+# ============================================
+# Global CORS Plugin
+# ============================================
+echo "Setting up global CORS plugin..."
+
+# Remove any existing global CORS plugins to avoid duplicates
+EXISTING_CORS=$(curl -s http://kong:8001/plugins | grep -o '"id":"[^"]*"' | head -1 | sed 's/"id":"//' | sed 's/"//')
+if [ -n "$EXISTING_CORS" ]; then
+  # Check if it's a cors plugin before deleting
+  for plugin_id in $(curl -s http://kong:8001/plugins | grep -o '"id":"[^"]*"' | sed 's/"id":"//' | sed 's/"//'); do
+    PLUGIN_NAME=$(curl -s http://kong:8001/plugins/$plugin_id | grep -o '"name":"[^"]*"' | sed 's/"name":"//' | sed 's/"//')
+    if [ "$PLUGIN_NAME" = "cors" ]; then
+      echo "Removing existing CORS plugin $plugin_id"
+      curl -s -X DELETE http://kong:8001/plugins/$plugin_id > /dev/null
+    fi
+  done
+fi
+
+# Read allowed origins from environment variable (set in docker-compose.yaml)
+CORS_ORIGINS="${ALLOWED_ORIGINS:-http://localhost:5173}"
+echo "Configuring CORS with origins: $CORS_ORIGINS"
+
+# Install global CORS plugin (applies to ALL routes)
+curl -s -X POST http://kong:8001/plugins \
+  --data "name=cors" \
+  --data "config.origins=$CORS_ORIGINS" \
+  --data "config.methods=GET" \
+  --data "config.methods=POST" \
+  --data "config.methods=PUT" \
+  --data "config.methods=PATCH" \
+  --data "config.methods=DELETE" \
+  --data "config.methods=OPTIONS" \
+  --data "config.headers=Content-Type" \
+  --data "config.headers=Authorization" \
+  --data "config.headers=Accept" \
+  --data "config.credentials=true" \
+  --data "config.max_age=3600" \
+  --data "config.preflight_continue=false" > /dev/null
+
+# Verify CORS plugin was installed
+CORS_CHECK=$(curl -s http://kong:8001/plugins | grep -o '"name":"cors"')
+if [ -n "$CORS_CHECK" ]; then
+  echo "✓ Global CORS plugin installed successfully."
+  echo "  - Origins: $CORS_ORIGINS"
+  echo "  - Preflight caching: 3600s (1 hour)"
+  echo "  - Preflight continue: false (Kong handles OPTIONS directly)"
+else
+  echo "⚠️ Warning: CORS plugin may not have been installed correctly."
+fi
+
+echo ""
+echo "Kong setup complete!"

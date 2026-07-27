@@ -7,17 +7,20 @@
 -- ===========================================
 -- Restaurant Data
 -- ===========================================
-INSERT INTO public.restaurant (capacity, availability, name, address, rating, cuisine)
+INSERT INTO public.restaurant (restaurant_id, capacity, availability, name, address, rating, cuisine)
 VALUES
-  (50, true, 'Sushi Haven', '10 Orchard Road, Singapore 238838', '4.8', 'Japanese'),
-  (50, true, 'Pasta Paradise', '123 Pasta Lane, Singapore 123456', '4.7', 'Italian'),
-  (1, true, 'Spice Garden', '45 Little India, Singapore 218025', '4.5', 'Indian'),
-  (60, true, 'Dragon Palace', '88 Chinatown Way, Singapore 059102', '4.6', 'Chinese'),
-  (35, true, 'Thai Orchid', '22 Boat Quay, Singapore 049822', '4.4', 'Thai'),
-  (45, true, 'Burger Barn', '15 Clarke Quay, Singapore 179023', '4.3', 'American'),
-  (55, true, 'Seoul Kitchen', '33 Tanjong Pagar, Singapore 088455', '4.7', 'Korean'),
-  (30, true, 'Mediterranean Breeze', '77 Marina Bay, Singapore 018956', '4.5', 'Mediterranean')
-ON CONFLICT DO NOTHING;
+  (1, 50, true, 'Sushi Haven', '10 Orchard Road, Singapore 238838', '4.8', 'Japanese'),
+  (2, 50, true, 'Pasta Paradise', '123 Pasta Lane, Singapore 123456', '4.7', 'Italian'),
+  (3, 1, true, 'Spice Garden', '45 Little India, Singapore 218025', '4.5', 'Indian'),
+  (4, 60, true, 'Dragon Palace', '88 Chinatown Way, Singapore 059102', '4.6', 'Chinese'),
+  (5, 35, true, 'Thai Orchid', '22 Boat Quay, Singapore 049822', '4.4', 'Thai'),
+  (6, 45, true, 'Burger Barn', '15 Clarke Quay, Singapore 179023', '4.3', 'American'),
+  (7, 55, true, 'Seoul Kitchen', '33 Tanjong Pagar, Singapore 088455', '4.7', 'Korean'),
+  (8, 30, true, 'Mediterranean Breeze', '77 Marina Bay, Singapore 018956', '4.5', 'Mediterranean')
+ON CONFLICT (restaurant_id) DO NOTHING;
+
+-- Synchronize sequence
+SELECT setval(pg_get_serial_sequence('public.restaurant', 'restaurant_id'), (SELECT MAX(restaurant_id) FROM public.restaurant));
 
 -- ===========================================
 -- Menu Data for Restaurant 1 (Sushi Haven)

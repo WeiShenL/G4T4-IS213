@@ -1,15 +1,30 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 import os
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from datetime import datetime
 
+import logging
+
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 
-CORS(app, resources={r"/*": {"origins": "*"}})
+@app.errorhandler(Exception)
+def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
+
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+if allowed_origins != "*":
+    allowed_origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
+CORS(app, resources={r"/*": {"origins": allowed_origins, "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"]}})
 
 # Database connection
 supabase_url = os.getenv('SUPABASE_URL')
@@ -44,9 +59,10 @@ def get_all_restaurants():
             "message": "No restaurants found."
         }), 404
     except Exception as e:
+        app.logger.error("Error in get_all_restaurants: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 # retrieve restaurant using id
@@ -66,9 +82,10 @@ def get_restaurant(restaurant_id):
             "message": "Restaurant not found."
         }), 404
     except Exception as e:
+        app.logger.error("Error in get_restaurant: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 # filter restaurants by cuisine
@@ -91,9 +108,10 @@ def get_restaurants_by_cuisine(cuisine):
             "message": f"No restaurants found with cuisine: {cuisine}"
         }), 404
     except Exception as e:
+        app.logger.error("Error in get_restaurants_by_cuisine: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 # check if open 1 = open 0 = close
@@ -119,9 +137,10 @@ def get_restaurants_by_availability(availability):
                 "message": "No restaurants found with this availability status"
             }), 404
     except Exception as e:
+        app.logger.error("Error in get_restaurants_by_availability: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 # Get restaurant capacity and count existing dine-in reservations
@@ -154,9 +173,10 @@ def get_restaurant_capacity(restaurant_id):
             }
         })
     except Exception as e:
+        app.logger.error("Error in get_restaurant_capacity: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
         
 if __name__ == '__main__':

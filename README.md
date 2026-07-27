@@ -8,17 +8,6 @@
 
 Restaurant table booking with waitlist reallocation and delivery.
 
-> [!NOTE]
-> **Submitted Project Snapshot:** The original project submission for evaluation is preserved in the [`submitted-project`](https://github.com/WeiShenL/G4T4-IS213/tree/submitted-project) branch (`git checkout submitted-project`).
-> 
-> **Post Submission Improvements (Added by Me):**
-> - **Local Self-Hosted Supabase**: Full Docker setup with Supabase Realtime for live order & driver dashboard updates.
-> - **Real-Time Live Dashboards**: Instant WebSocket updates via Supabase Realtime for Customer & Driver dashboards (no manual page refreshes needed).
-> - **Native Waitlist Microservice**: Replaced OutSystems with custom Python microservice & decline reallocation workflow.
-> - **Resend Email Service**: Integrated Resend API for transactional notifications, instead of paid Twilio SMS API.
-> - **Production VPC Ready**: Docker containerization & single-command deployment scripts (`start-local.sh`).
-
-
 ## Problem Statement
 
 Restaurants face significant revenue loss due to last-minute cancellations, inefficient seat allocation, and high delivery platform commissions. There is a need for an integrated reservation and delivery management system for restaurants.
@@ -40,48 +29,48 @@ Follow these steps to set up the FeastFinder application on your local machine:
 
 ### 1. Setup Environment Files
 ```bash
-# Backend environment
+# Copy env templates
 cp backend/.env.example backend/.env
 cp backend/supabase/.env.example backend/supabase/.env
-
-# Frontend environment
 cp frontend/.env.example frontend/.env
 ```
 
-### 2. Start All Backend Services (Supabase + Microservices)
+### 2. Option A: One-Command Unified Local Stack (Recommended for Dev)
+Launch the entire stack (Supabase, 17 microservices, Kong Gateway, RabbitMQ, and Frontend with **Vite Hot-Module-Reloading**):
 ```bash
-cd backend
 ./start-local.sh
 ```
-This starts local Supabase and all 17 microservices via Docker.
+The application will be available at [http://localhost:5173](http://localhost:5173) with instant HMR on `.vue` file changes.
 
-### 3. Install Frontend Dependencies & Run
+### 3. Option B: Production Containerized Mode (Caddy Web Server)
+Launch the hardened production stack (Multi-stage Caddy container for frontend, zero Node.js runtime, restricted admin ports):
 ```bash
-cd frontend
-npm install
-npm run dev
+./start-prod.sh
 ```
+The production application will be available at [http://localhost:8080](http://localhost:8080).
 
-The application will be available at [http://localhost:5173](http://localhost:5173).
+---
 
 ### Access Points
-| Service | URL |
-|---------|-----|
-| Frontend | http://localhost:5173 |
-| Kong API Gateway | http://localhost:8000 |
-| Supabase Studio | http://localhost:3000 |
-| Supabase API | http://localhost:8100 |
-| RabbitMQ Console | http://localhost:15672 (guest/guest) |
+| Service | Local Dev URL | Production Container URL |
+|---------|---------------|--------------------------|
+| Frontend UI | http://localhost:5173 (Vite HMR) | http://localhost:8080 (Caddy) |
+| Kong API Gateway | http://localhost:8000 | http://localhost:8000 |
+| Supabase Studio | http://localhost:3000 | http://localhost:3000 |
+| Supabase API | http://localhost:8100 | http://localhost:8100 |
+| RabbitMQ Console | http://localhost:15672 (guest/guest) | http://localhost:15672 (127.0.0.1 loopback) |
 
 ### Stop All Services
 ```bash
-cd backend
+# Stop local dev stack:
 ./stop-local.sh
+
+# Stop production stack:
+./stop-prod.sh
 ```
 
 ## Technical Architecture Diagram
 <img width="809" alt="Screenshot 2025-04-11 at 7 25 24 AM" src="https://github.com/user-attachments/assets/c41e08a8-5bb9-4c39-b9f0-4b1fe3d71d7e" />
-
 
 ## Frameworks and Databases Utilised
 <p align="center"><strong>Microservices and UI</strong></p>
@@ -157,3 +146,13 @@ cd backend
 <i>Github · Docker Compose</i>
 </p>
 <br> 
+
+> [!NOTE]
+> **Submitted Project Snapshot:** The original project submission for evaluation is preserved in the [`submitted-project`](https://github.com/WeiShenL/G4T4-IS213/tree/submitted-project) branch (`git checkout submitted-project`).
+> 
+> **Post Submission Improvements:**
+> - **Local Self-Hosted Supabase**: Full Docker setup with Supabase Realtime for live order & driver dashboard updates.
+> - **Real-Time Live Dashboards**: Instant WebSocket updates via Supabase Realtime for Customer & Driver dashboards (no manual page refreshes needed).
+> - **Native Waitlist Microservice**: Replaced OutSystems with custom Python microservice & decline reallocation workflow.
+> - **Resend Email Service**: Integrated Resend API for transactional notifications, instead of paid Twilio SMS API.
+> - **Production VPC Ready**: Docker containerization & single-command deployment scripts (`start-local.sh`).

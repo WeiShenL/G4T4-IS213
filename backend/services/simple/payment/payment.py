@@ -1,16 +1,31 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 import os
 from dotenv import load_dotenv
 import stripe
 from datetime import datetime
 from supabase import create_client, Client
 
+import logging
+
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 
-CORS(app, resources={r"/*": {"origins": "*"}})
+@app.errorhandler(Exception)
+def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
+
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+if allowed_origins != "*":
+    allowed_origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
+CORS(app, resources={r"/*": {"origins": allowed_origins, "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"]}})
 
 # Stripe configuration
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
@@ -128,10 +143,10 @@ def process_refund():
         }), 400
 
     except Exception as e:
-        print(f"Error processing refund: {str(e)}")
+        app.logger.error("Error processing refund: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 # Create a checkout session
@@ -194,10 +209,10 @@ def create_checkout_session():
         })
     
     except Exception as e:
-        print(f"Error creating checkout session: {str(e)}")
+        app.logger.error("Error creating checkout session: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An internal server error occurred"
         }), 500
 
 # Verify payment and update payment db for logging purposes
@@ -246,14 +261,10 @@ def verify_payment(session_id):
         })
     
     except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        print(f"Error verifying payment: {type(e).__name__}: {str(e)!r}", flush=True)
-        print(tb, flush=True)
+        app.logger.error("Error verifying payment: %s", str(e), exc_info=True)
         return jsonify({
             "code": 500,
-            "message": f"{type(e).__name__}: {str(e)}",
-            "trace": tb.splitlines()[-3:],
+            "message": "An internal server error occurred"
         }), 500
 
 if __name__ == '__main__':

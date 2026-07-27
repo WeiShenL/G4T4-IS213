@@ -2,13 +2,27 @@ import json
 import time
 import requests
 from flask import Flask, request, jsonify
+from werkzeug.exceptions import HTTPException
 from flask_cors import CORS
 import pika
 import os
 from dotenv import load_dotenv
 from datetime import datetime
 
+import logging
+
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+
+app = Flask(__name__)
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
+    app.logger.error("Unhandled Exception: %s", str(e), exc_info=True)
+    return jsonify({"error": "An internal server error occurred"}), 500
 
 # RabbitMQ configuration
 RABBITMQ_HOST = os.environ.get("RABBITMQ_HOST", "localhost")
@@ -23,8 +37,10 @@ ORDER_SERVICE_URL = os.environ.get("ORDER_SERVICE_URL", "http://order-service:50
 WAITLIST_SERVICE_URL = os.environ.get("WAITLIST_SERVICE_URL", "http://waitlist-service:5000")
 
 
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+if allowed_origins != "*":
+    allowed_origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
+CORS(app, resources={r"/*": {"origins": allowed_origins, "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"]}})
 
 @app.route("/api/reallocate/health", methods=['GET'])
 def health_check():
@@ -240,13 +256,13 @@ def reallocate_reservation():
             }), 200
 
         except Exception as e:
-            print(f"Error during notification: {str(e)}")
+            app.logger.error("Error during notification in reallocation: %s", str(e), exc_info=True)
             release_waitlist_on_error()
-            return jsonify({"error": f"Reallocation failed during notification: {str(e)}"}), 500
+            return jsonify({"code": 500, "error": "An internal server error occurred"}), 500
 
     except Exception as e:
-        print(f"Error during reallocation: {str(e)}")
-        return jsonify({"error": f"Reallocation failed: {str(e)}"}), 500
+        app.logger.error("Error during reallocation: %s", str(e), exc_info=True)
+        return jsonify({"code": 500, "error": "An internal server error occurred"}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5009))
