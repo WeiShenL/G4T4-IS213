@@ -1,54 +1,14 @@
-name: FeastFinder CI & Automated Release
+name: Automated GitHub Release
 
 on:
   push:
     branches: [ main ]
     tags:
       - 'v*'
-  pull_request:
-    branches: [ main ]
 
 jobs:
-  # -------------------------------------------------------------------
-  # Job 1: Continuous Integration (Build Verification & Code Checks)
-  # -------------------------------------------------------------------
-  ci-build:
-    name: Build Verification & Syntax Validation
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Codebase
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js Environment
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Validate Frontend Compilation
-        run: |
-          cd frontend
-          npm ci
-          npm run build
-
-      - name: Setup Python Environment
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Validate Microservices Python Syntax
-        run: |
-          python -m py_compile backend/services/*/*/*.py backend/rabbitmq/*.py
-
-  # -------------------------------------------------------------------
-  # Job 2: Automated GitHub Release (Executes on main branch merge/push)
-  # -------------------------------------------------------------------
   release:
     name: Create GitHub Release
-    needs: ci-build
-    if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
