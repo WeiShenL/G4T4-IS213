@@ -24,8 +24,8 @@ ORDER_SERVICE_URL = os.environ.get("ORDER_SERVICE_URL", "http://order-service:50
 RESERVATION_SERVICE_URL = os.environ.get("RESERVATION_SERVICE_URL", "http://reservation-service:5000")
 WAITLIST_SERVICE_URL = os.environ.get("WAITLIST_SERVICE_URL", "http://waitlist-service:5000")
 
+from werkzeug.exceptions import HTTPException
 import logging
-
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
