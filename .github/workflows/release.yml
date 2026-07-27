@@ -46,7 +46,7 @@ jobs:
             ${{ github.event.pull_request.title && format('# 📌 {0}', github.event.pull_request.title) || '' }}
 
             ${{ github.event.pull_request.body || '' }}
-          generate_release_notes: true
+          generate_release_notes: false
           draft: false
           prerelease: false
         env:
