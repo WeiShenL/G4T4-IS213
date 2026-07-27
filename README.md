@@ -8,17 +8,6 @@
 
 Restaurant table booking with waitlist reallocation and delivery.
 
-> [!NOTE]
-> **Submitted Project Snapshot:** The original project submission for evaluation is preserved in the [`submitted-project`](https://github.com/WeiShenL/G4T4-IS213/tree/submitted-project) branch (`git checkout submitted-project`).
-> 
-> **Post Submission Improvements (Added by Me):**
-> - **Local Self-Hosted Supabase**: Full Docker setup with Supabase Realtime for live order & driver dashboard updates.
-> - **Real-Time Live Dashboards**: Instant WebSocket updates via Supabase Realtime for Customer & Driver dashboards (no manual page refreshes needed).
-> - **Native Waitlist Microservice**: Replaced OutSystems with custom Python microservice & decline reallocation workflow.
-> - **Resend Email Service**: Integrated Resend API for transactional notifications, instead of paid Twilio SMS API.
-> - **Production VPC Ready**: Docker containerization & single-command deployment scripts (`start-local.sh`).
-
-
 ## Problem Statement
 
 Restaurants face significant revenue loss due to last-minute cancellations, inefficient seat allocation, and high delivery platform commissions. There is a need for an integrated reservation and delivery management system for restaurants.
@@ -157,3 +146,13 @@ The production application will be available at [http://localhost:8080](http://l
 <i>Github · Docker Compose</i>
 </p>
 <br> 
+
+> [!NOTE]
+> **Submitted Project Snapshot:** The original project submission for evaluation is preserved in the [`submitted-project`](https://github.com/WeiShenL/G4T4-IS213/tree/submitted-project) branch (`git checkout submitted-project`).
+> 
+> **Post Submission Improvements:**
+> - **Local Self-Hosted Supabase**: Full Docker setup with Supabase Realtime for live order & driver dashboard updates.
+> - **Real-Time Live Dashboards**: Instant WebSocket updates via Supabase Realtime for Customer & Driver dashboards (no manual page refreshes needed).
+> - **Native Waitlist Microservice**: Replaced OutSystems with custom Python microservice & decline reallocation workflow.
+> - **Resend Email Service**: Integrated Resend API for transactional notifications, instead of paid Twilio SMS API.
+> - **Production VPC Ready**: Docker containerization & single-command deployment scripts (`start-local.sh`).

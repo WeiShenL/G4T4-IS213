@@ -4,6 +4,7 @@ import threading
 import pika
 import time
 import logging
+import html
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -96,6 +97,7 @@ def send_email(to_email, subject, message):
             logging.warning("RESEND_API_KEY is not set. Email notification logged locally.")
             return {"status": "skipped", "reason": "No RESEND_API_KEY configured"}
             
+        escaped_message = html.escape(message)
         params = {
             "from": SENDER_EMAIL,
             "to": [to_email],
@@ -103,7 +105,7 @@ def send_email(to_email, subject, message):
             "html": f"""
             <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; border: 1px solid #eee; border-radius: 8px;">
                 <h2 style="color: #e63946; margin-bottom: 16px;">FeastFinder</h2>
-                <p style="font-size: 16px; line-height: 1.5; color: #333;">{message}</p>
+                <p style="font-size: 16px; line-height: 1.5; color: #333;">{escaped_message}</p>
                 <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
                 <p style="font-size: 12px; color: #888;">Thank you for using FeastFinder!</p>
             </div>
