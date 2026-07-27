@@ -1,0 +1,93 @@
+name: FeastFinder CI & Automated Release
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # -------------------------------------------------------------------
+  # Job 1: Continuous Integration (Build Verification & Code Checks)
+  # -------------------------------------------------------------------
+  ci-build:
+    name: Build Verification & Syntax Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Validate Frontend Compilation
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Setup Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate Microservices Python Syntax
+        run: |
+          python -m py_compile backend/services/*/*/*.py backend/rabbitmq/*.py
+
+  # -------------------------------------------------------------------
+  # Job 2: Automated GitHub Release (Executes on main branch merge/push)
+  # -------------------------------------------------------------------
+  release:
+    name: Create GitHub Release
+    needs: ci-build
+    if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract Dynamic Release Version Tag
+        id: vars
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            # Fetch latest git tag (defaults to v1.0.0 if none)
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+            # Parse SemVer vX.Y.Z and auto-increment patch digit Z (e.g. v1.0.0 -> v1.0.1)
+            VERSION_NUM="${LATEST_TAG#v}"
+            MAJOR_MINOR=$(echo "$VERSION_NUM" | awk -F. '{print $1"."$2}')
+            CURRENT_PATCH=$(echo "$VERSION_NUM" | awk -F. '{print $3}')
+            NEXT_PATCH=$((CURRENT_PATCH + 1))
+            NEW_TAG="v${MAJOR_MINOR}.${NEXT_PATCH}"
+            echo "TAG_NAME=${NEW_TAG}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Dynamic GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.TAG_NAME }}
+          name: "Release ${{ steps.vars.outputs.TAG_NAME }}"
+          body: |
+            ${{ github.event.pull_request.title && format('# 📌 {0}', github.event.pull_request.title) || '' }}
+
+            ${{ github.event.pull_request.body || '' }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
