@@ -49,7 +49,12 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 -- auth schema: GoTrue's first migration tries to CREATE TABLE auth.users
 -- but does not CREATE SCHEMA itself — supabase/postgres image normally does this.
 CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_auth_admin;
+CREATE TABLE IF NOT EXISTS auth.users (
+  id uuid NOT NULL PRIMARY KEY,
+  raw_user_meta_data jsonb
+);
 GRANT ALL ON SCHEMA auth TO supabase_auth_admin;
+GRANT ALL ON ALL TABLES IN SCHEMA auth TO supabase_auth_admin;
 GRANT USAGE ON SCHEMA auth TO authenticated, anon, service_role;
 
 -- GoTrue migrations create types without schema prefix (e.g. "factor_type" not "auth.factor_type").

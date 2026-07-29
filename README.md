@@ -35,17 +35,17 @@ cp backend/supabase/.env.example backend/supabase/.env
 cp frontend/.env.example frontend/.env
 ```
 
-### 2. Option A: One-Command Unified Local Stack (Recommended for Dev)
+### 2. Option A: Native Local Stack (Recommended for Dev)
 Launch the entire stack (Supabase, 17 microservices, Kong Gateway, RabbitMQ, and Frontend with **Vite Hot-Module-Reloading**):
 ```bash
-./start-local.sh
+docker compose up -d
 ```
-The application will be available at [http://localhost:5173](http://localhost:5173) with instant HMR on `.vue` file changes.
+The application will be available at [http://localhost:5173](http://localhost:5173).
 
 ### 3. Option B: Production Containerized Mode (Caddy Web Server)
 Launch the hardened production stack (Multi-stage Caddy container for frontend, zero Node.js runtime, restricted admin ports):
 ```bash
-./start-prod.sh
+docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d
 ```
 The production application will be available at [http://localhost:8080](http://localhost:8080).
 
@@ -56,17 +56,17 @@ The production application will be available at [http://localhost:8080](http://l
 |---------|---------------|--------------------------|
 | Frontend UI | http://localhost:5173 (Vite HMR) | http://localhost:8080 (Caddy) |
 | Kong API Gateway | http://localhost:8000 | http://localhost:8000 |
-| Supabase Studio | http://localhost:3000 | http://localhost:3000 |
+| Supabase Studio | http://localhost:3000 | Disabled (N/A) |
 | Supabase API | http://localhost:8100 | http://localhost:8100 |
-| RabbitMQ Console | http://localhost:15672 (guest/guest) | http://localhost:15672 (127.0.0.1 loopback) |
+| RabbitMQ Console | http://localhost:15672 (guest/guest) | http://localhost:15672 |
 
 ### Stop All Services
 ```bash
 # Stop local dev stack:
-./stop-local.sh
+docker compose down
 
 # Stop production stack:
-./stop-prod.sh
+docker compose -f docker-compose.yaml -f docker-compose.prod.yaml down
 ```
 
 ## Technical Architecture Diagram
@@ -155,4 +155,4 @@ The production application will be available at [http://localhost:8080](http://l
 > - **Real-Time Live Dashboards**: Instant WebSocket updates via Supabase Realtime for Customer & Driver dashboards (no manual page refreshes needed).
 > - **Native Waitlist Microservice**: Replaced OutSystems with custom Python microservice & decline reallocation workflow.
 > - **Resend Email Service**: Integrated Resend API for transactional notifications, instead of paid Twilio SMS API.
-> - **Production VPC Ready**: Docker containerization & single-command deployment scripts (`start-local.sh`).
+> - **Production VPC Ready**: Docker containerization, including Frontend and Backend for both local and prod environments. WatchTower will be used to fetch latest push to main to update containers for production.
