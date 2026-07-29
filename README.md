@@ -2,8 +2,7 @@
 
 ## FeastFinder
 <p align="center">
-<img width="400" height="300" alt="FeastFinder" src="https://github.com/user-attachments/assets/fa098713-e1b3-4509-b2e6-3423d38aabb8" />
-<img width="400" height="300" alt="Screenshot 2025-04-12 at 10 59 35 AM" src="https://github.com/user-attachments/assets/dfb21882-f242-4c4e-a654-eb95cd137a93" />
+  <img alt="FeastFinder Demo" src="./FeastFinder_Demo.gif" width="800" />
 </p>
 
 Restaurant table booking with waitlist reallocation and delivery.
