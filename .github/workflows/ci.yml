@@ -6,10 +6,19 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  ci-build:
+  build-verification:
     name: Build Verification & Syntax Validation
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout Codebase
@@ -36,3 +45,7 @@ jobs:
       - name: Validate Microservices Python Syntax
         run: |
           python -m py_compile backend/services/*/*/*.py backend/rabbitmq/*.py
+
+      - name: Build Verification of Docker Stack
+        run: |
+          docker compose -f docker-compose.yaml build

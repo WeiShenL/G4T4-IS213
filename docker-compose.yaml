@@ -9,6 +9,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
+    image: ghcr.io/weishenl/g4t4-is213-frontend:latest
     ports:
       - "5173:5173"
     volumes:

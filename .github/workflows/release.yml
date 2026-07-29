@@ -1,14 +1,137 @@
-name: Automated GitHub Release
+name: Automated Release & GHCR Image Publishing
 
 on:
+  pull_request:
+    types: [closed]
+    branches: [main]
   push:
-    branches: [ main ]
     tags:
       - 'v*'
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  publish-ghcr-images:
+    name: Build & Push Service Image to GHCR
+    if: github.event_name == 'push' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-frontend
+          - name: rabbitmq-setup
+            context: ./backend/rabbitmq
+            dockerfile: ./backend/rabbitmq/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-rabbitmq-setup
+          - name: menu-service
+            context: ./backend/services/simple/menu
+            dockerfile: ./backend/services/simple/menu/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-menu-service
+          - name: reservation-service
+            context: ./backend/services/simple/reservation
+            dockerfile: ./backend/services/simple/reservation/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-reservation-service
+          - name: order-service
+            context: ./backend/services/simple/order
+            dockerfile: ./backend/services/simple/order/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-order-service
+          - name: restaurant-service
+            context: ./backend/services/simple/restaurant
+            dockerfile: ./backend/services/simple/restaurant/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-restaurant-service
+          - name: user-service
+            context: ./backend/services/simple/user
+            dockerfile: ./backend/services/simple/user/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-user-service
+          - name: notification-service
+            context: ./backend/services/simple/notification
+            dockerfile: ./backend/services/simple/notification/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-notification-service
+          - name: payment-service
+            context: ./backend/services/simple/payment
+            dockerfile: ./backend/services/simple/payment/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-payment-service
+          - name: waitlist-service
+            context: ./backend/services/simple/waitlist
+            dockerfile: ./backend/services/simple/waitlist/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-waitlist-service
+          - name: driver-service
+            context: ./backend/services/simple/driver
+            dockerfile: ./backend/services/simple/driver/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-driver-service
+          - name: driver-details-service
+            context: ./backend/services/simple/driver_details
+            dockerfile: ./backend/services/simple/driver_details/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-driver-details-service
+          - name: geo-service
+            context: ./backend/services/simple/geo
+            dockerfile: ./backend/services/simple/geo/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-geo-service
+          - name: create-booking-service
+            context: ./backend/services/complex/create_booking
+            dockerfile: ./backend/services/complex/create_booking/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-create-booking-service
+          - name: accept-reallocation-service
+            context: ./backend/services/complex/accept_reallocation
+            dockerfile: ./backend/services/complex/accept_reallocation/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-accept-reallocation-service
+          - name: cancel-booking-service
+            context: ./backend/services/complex/cancel_booking
+            dockerfile: ./backend/services/complex/cancel_booking/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-cancel-booking-service
+          - name: reallocate-reservation-service
+            context: ./backend/services/complex/reallocate_reservation
+            dockerfile: ./backend/services/complex/reallocate_reservation/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-reallocate-reservation-service
+          - name: driver-status-service
+            context: ./backend/services/complex/driver_status
+            dockerfile: ./backend/services/complex/driver_status/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-driver-status-service
+          - name: dms-service
+            context: ./backend/services/complex/dms
+            dockerfile: ./backend/services/complex/dms/Dockerfile
+            image: ghcr.io/weishenl/g4t4-is213-dms-service
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ matrix.image }}:latest
+            ${{ matrix.image }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   release:
     name: Create GitHub Release
+    if: github.event_name == 'push' || github.event.pull_request.merged == true
+    needs: publish-ghcr-images
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -22,11 +145,15 @@ jobs:
       - name: Extract Dynamic Release Version Tag
         id: vars
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           else
             # Fetch latest git tag (defaults to v1.0.0 if none)
             LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+            if ! [[ "$LATEST_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Latest tag '$LATEST_TAG' is not strict semver (vX.Y.Z) — cannot auto-increment. Push a manual vX.Y.Z tag instead." >&2
+              exit 1
+            fi
             # Parse SemVer vX.Y.Z and auto-increment patch digit Z (e.g. v1.0.0 -> v1.0.1)
             VERSION_NUM="${LATEST_TAG#v}"
             MAJOR_MINOR=$(echo "$VERSION_NUM" | awk -F. '{print $1"."$2}')
