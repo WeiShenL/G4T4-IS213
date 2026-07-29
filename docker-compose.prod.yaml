@@ -8,6 +8,46 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
+  # Supabase Core: Restrict DB, Auth & API Gateway host ports
+  supabase-db:
+    logging: *default-logging
+    ports:
+      - "127.0.0.1:5433:5432"
+
+  supabase-auth:
+    logging: *default-logging
+    ports: []
+
+  supabase-rest:
+    logging: *default-logging
+    ports: []
+
+  realtime-dev:
+    logging: *default-logging
+    ports: []
+
+  supabase-kong:
+    logging: *default-logging
+    ports:
+      - "8100:8000"
+
+  # Disable Supabase Studio & Meta in Production Mode
+  supabase-studio:
+    logging: *default-logging
+    profiles:
+      - disabled
+    deploy:
+      replicas: 0
+    ports: []
+
+  supabase-meta:
+    logging: *default-logging
+    profiles:
+      - disabled
+    deploy:
+      replicas: 0
+    ports: []
+
   # Kong Postgres DB: Restrict to localhost only
   kong-database:
     logging: *default-logging
@@ -28,6 +68,9 @@ services:
     ports:
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:15672:15672"
+
+  rabbitmq-setup:
+    logging: *default-logging
 
   # Microservices: Remove all host port exposure & cap log rotation
   reservation-service:

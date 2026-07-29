@@ -44,7 +44,7 @@
                 </div>
                 <small class="text-muted d-block">
                   When you accept, pick up, or deliver an order, customer status emails are automatically dispatched via Resend API. 
-                  <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to the developer's testing inbox).</em>
+                  <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to my testing inbox).</em>
                 </small>
               </div>
             </div>

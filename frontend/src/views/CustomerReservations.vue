@@ -65,7 +65,7 @@
               </div>
               <small class="text-muted d-block">
                 A cancellation & refund email notification has been dispatched via Resend API. 
-                <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to the developer's testing inbox).</em>
+                <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to my testing inbox).</em>
               </small>
             </div>
           </div>
@@ -167,7 +167,7 @@
                 </div>
                 <small class="text-muted d-block">
                   A cancellation & refund email notification has been dispatched via Resend API. 
-                  <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to the developer's testing inbox).</em>
+                  <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to my testing inbox).</em>
                 </small>
               </div>
             </div>

@@ -70,7 +70,7 @@
             </div>
             <small class="text-muted d-block">
               An automated confirmation email has been dispatched via Resend API. 
-              <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to the developer's testing inbox).</em>
+              <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to my testing inbox).</em>
             </small>
           </div>
           <hr>
@@ -99,7 +99,7 @@
             </div>
             <small class="text-muted d-block">
               A waitlist notification email has been dispatched via Resend API. 
-              <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to the developer's testing inbox).</em>
+              <em>(Portfolio Note: On the free API sandbox, live email deliveries are routed to my testing inbox).</em>
             </small>
           </div>
           <hr>

@@ -1,10 +1,328 @@
-# Unified FeastFinder Local Development Stack
-# Includes full backend microservices stack & launches Frontend with Vite Hot-Module-Reloading (HMR)
+# Unified FeastFinder Stack (Base & Local Development)
+# Usage:
+#   Start Local Dev:  docker compose up -d
+#   Stop Stack:       docker compose down
+#   Destroy Data:     docker compose down -v
+#   View Logs:        docker compose logs -f [service-name]
 
-include:
-  - backend/docker-compose.yaml
+name: feastfinder
 
 services:
+  # ===========================================
+  # SUPABASE CORE DATABASE & SERVICES
+  # ===========================================
+  supabase-db:
+    image: supabase/postgres:15.6.1.143
+    container_name: supabase-db
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    env_file:
+      - ./backend/supabase/.env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-password}
+      POSTGRES_DB: postgres
+      JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      JWT_EXP: ${JWT_EXP:-3600}
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+      - ./backend/supabase/init/00-supabase-roles.sh:/docker-entrypoint-initdb.d/00-supabase-roles.sh:ro
+      - ./backend/supabase/init/app-schema/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./backend/supabase/init/app-schema/02-triggers.sql:/docker-entrypoint-initdb.d/02-triggers.sql:ro
+      - ./backend/supabase/init/app-schema/03-seed-data.sql:/docker-entrypoint-initdb.d/03-seed-data.sql:ro
+      - ./backend/supabase/init/app-schema/04-rls-policies.sql:/docker-entrypoint-initdb.d/04-rls-policies.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - supabase-network
+
+  supabase-auth:
+    image: supabase/gotrue:v2.164.0
+    container_name: supabase-auth
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    env_file:
+      - ./backend/supabase/.env
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD:-your-super-secret-password}@supabase-db:5432/postgres
+      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:5173}
+      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS:-}
+      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-false}
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: ${JWT_EXP:-3600}
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: ${ENABLE_EMAIL_SIGNUP:-true}
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: ${ENABLE_ANONYMOUS_USERS:-false}
+      GOTRUE_MAILER_AUTOCONFIRM: ${ENABLE_EMAIL_AUTOCONFIRM:-true}
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-admin@localhost}
+      GOTRUE_SMTP_MAX_FREQUENCY: 1s
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+      GOTRUE_EXTERNAL_PHONE_ENABLED: ${ENABLE_PHONE_SIGNUP:-false}
+      GOTRUE_SMS_AUTOCONFIRM: ${ENABLE_PHONE_AUTOCONFIRM:-true}
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: 100
+      GOTRUE_RATE_LIMIT_TOKEN_REFRESH: 100
+    networks:
+      - supabase-network
+
+  supabase-rest:
+    image: postgrest/postgrest:v12.2.3
+    container_name: supabase-rest
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    env_file:
+      - ./backend/supabase/.env
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:-your-super-secret-password}@supabase-db:5432/postgres
+      PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS:-public,storage,graphql_public}
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      PGRST_APP_SETTINGS_JWT_EXP: ${JWT_EXP:-3600}
+    networks:
+      - supabase-network
+
+  realtime-dev:
+    image: supabase/realtime:v2.33.58
+    container_name: realtime-dev
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    env_file:
+      - ./backend/supabase/.env
+    environment:
+      PORT: 4000
+      DB_HOST: supabase-db
+      DB_PORT: 5432
+      DB_USER: supabase_admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-password}
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: 'SET search_path TO _realtime'
+      DB_ENC_KEY: supabaserealtime
+      API_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      SECRET_KEY_BASE: UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq
+      ERL_AFLAGS: -proto_dist inet_tcp
+      ENABLE_TAILSCALE: "false"
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: "10000"
+      APP_NAME: "realtime"
+      FLY_ALLOC_ID: local
+      FLY_APP_NAME: realtime
+    command: >
+      sh -c "/app/bin/migrate && /app/bin/realtime eval 'Realtime.Release.seeds(Realtime.Repo)' && /app/bin/server"
+    networks:
+      - supabase-network
+
+  supabase-kong:
+    image: kong:2.8.1
+    container_name: supabase-kong
+    restart: unless-stopped
+    depends_on:
+      supabase-auth:
+        condition: service_started
+      supabase-rest:
+        condition: service_started
+      realtime-dev:
+        condition: service_started
+    ports:
+      - "8100:8000"
+      - "8101:8443"
+    env_file:
+      - ./backend/supabase/.env
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+      SUPABASE_ANON_KEY: ${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
+    volumes:
+      - ./backend/supabase/kong.yml:/home/kong/kong.yml:ro
+    networks:
+      - supabase-network
+
+  supabase-studio:
+    image: supabase/studio:20241202-71e5240
+    container_name: supabase-studio
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./backend/supabase/.env
+    environment:
+      STUDIO_PG_META_URL: http://supabase-meta:8080
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-password}
+      DEFAULT_ORGANIZATION_NAME: FeastFinder
+      DEFAULT_PROJECT_NAME: FeastFinder Local
+      SUPABASE_URL: http://supabase-kong:8000
+      SUPABASE_PUBLIC_URL: ${API_EXTERNAL_URL:-http://localhost:8100}
+      SUPABASE_ANON_KEY: ${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
+      LOGFLARE_API_KEY: ${LOGFLARE_API_KEY:-}
+      LOGFLARE_URL: http://localhost:4000
+      NEXT_PUBLIC_ENABLE_LOGS: "false"
+      NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
+    networks:
+      - supabase-network
+
+  supabase-meta:
+    image: supabase/postgres-meta:v0.84.2
+    container_name: supabase-meta
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    env_file:
+      - ./backend/supabase/.env
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: supabase-db
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: supabase_admin
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-password}
+    networks:
+      - supabase-network
+
+  # ===========================================
+  # KONG API GATEWAY & RABBITMQ INFRASTRUCTURE
+  # ===========================================
+  kong-database:
+    image: postgres:17.4
+    platform: linux/amd64
+    restart: always
+    networks:
+      - feastfinder-network
+    environment:
+      POSTGRES_DB: kong
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: ${KONG_PG_PASSWORD:-password}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "kong"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - kong_pgdata:/var/lib/postgresql/data
+
+  kong-migration:
+    image: kong/kong-gateway:3.9
+    platform: linux/amd64
+    command: "kong migrations bootstrap"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD:-password}
+    depends_on:
+      kong-database:
+        condition: service_healthy
+
+  kong:
+    image: kong/kong-gateway:3.9
+    platform: linux/amd64
+    restart: always
+    networks:
+      - feastfinder-network
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD:-password}
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_ADMIN_GUI_URL: http://localhost:8002
+    depends_on:
+      kong-migration:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8002:8002"
+
+  kong-setup:
+    image: curlimages/curl:latest
+    platform: linux/amd64
+    restart: on-failure
+    volumes:
+      - ./backend/kong/setup_kong.sh:/setup_kong.sh
+    entrypoint: ["sh", "/setup_kong.sh"]
+    environment:
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173}
+    depends_on:
+      - kong
+    networks:
+      - feastfinder-network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    hostname: rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - feastfinder-network
+
+  rabbitmq-setup:
+    build: ./backend/rabbitmq
+    image: ghcr.io/weishenl/g4t4-is213-rabbitmq-setup:latest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+    restart: on-failure
+    networks:
+      - feastfinder-network
+
+  # ===========================================
+  # FRONTEND (Local Dev Vite HMR)
+  # ===========================================
   frontend:
     build:
       context: ./frontend
@@ -23,3 +341,402 @@ services:
       - feastfinder-network
     depends_on:
       - kong
+
+  # ===========================================
+  # SIMPLE MICROSERVICES
+  # ===========================================
+  menu-service:
+    build: ./backend/services/simple/menu
+    image: ghcr.io/weishenl/g4t4-is213-menu-service:latest
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      - PORT=5000
+    env_file:
+      - ./backend/.env
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  reservation-service:
+    build: ./backend/services/simple/reservation
+    image: ghcr.io/weishenl/g4t4-is213-reservation-service:latest
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      - PORT=5000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5002:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  order-service:
+    build: ./backend/services/simple/order
+    image: ghcr.io/weishenl/g4t4-is213-order-service:latest
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      - PORT=5000
+    env_file:
+      - ./backend/.env
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  restaurant-service:
+    build: ./backend/services/simple/restaurant
+    image: ghcr.io/weishenl/g4t4-is213-restaurant-service:latest
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      - PORT=5000
+    env_file:
+      - ./backend/.env
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  user-service:
+    build: ./backend/services/simple/user
+    image: ghcr.io/weishenl/g4t4-is213-user-service:latest
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      - PORT=5000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5000:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  notification-service:
+    build: ./backend/services/simple/notification
+    image: ghcr.io/weishenl/g4t4-is213-notification-service:latest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      supabase-db:
+        condition: service_healthy
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - PORT=5000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5005:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  payment-service:
+    build: ./backend/services/simple/payment
+    image: ghcr.io/weishenl/g4t4-is213-payment-service:latest
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      - PORT=5000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5006:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  waitlist-service:
+    build: ./backend/services/simple/waitlist
+    image: ghcr.io/weishenl/g4t4-is213-waitlist-service:latest
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      - PORT=5000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5016:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  driver-service:
+    build: ./backend/services/simple/driver
+    image: ghcr.io/weishenl/g4t4-is213-driver-service:latest
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      - PORT=5000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5011:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  driver-details-service:
+    build: ./backend/services/simple/driver_details
+    image: ghcr.io/weishenl/g4t4-is213-driver-details-service:latest
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      - PORT=5000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5012:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  geo-service:
+    build: ./backend/services/simple/geo
+    image: ghcr.io/weishenl/g4t4-is213-geo-service:latest
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      - PORT=5000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5013:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  # ===========================================
+  # COMPLEX ORCHESTRATOR SERVICES
+  # ===========================================
+  create-booking-service:
+    build: ./backend/services/complex/create_booking
+    image: ghcr.io/weishenl/g4t4-is213-create-booking-service:latest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      menu-service:
+        condition: service_started
+      reservation-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      restaurant-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - PORT=5000
+      - USER_SERVICE_URL=http://user-service:5000
+      - RESTAURANT_SERVICE_URL=http://restaurant-service:5000
+      - ORDER_SERVICE_URL=http://order-service:5000
+      - RESERVATION_SERVICE_URL=http://reservation-service:5000
+      - MENU_SERVICE_URL=http://menu-service:5000
+      - NOTIFICATION_SERVICE_URL=http://notification-service:5000
+      - PAYMENT_SERVICE_URL=http://payment-service:5000
+    env_file:
+      - ./backend/.env
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  accept-reallocation-service:
+    build: ./backend/services/complex/accept_reallocation
+    image: ghcr.io/weishenl/g4t4-is213-accept-reallocation-service:latest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      reservation-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      restaurant-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - PORT=5000
+      - USER_SERVICE_URL=http://user-service:5000
+      - RESTAURANT_SERVICE_URL=http://restaurant-service:5000
+      - ORDER_SERVICE_URL=http://order-service:5000
+      - RESERVATION_SERVICE_URL=http://reservation-service:5000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5010:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  cancel-booking-service:
+    build: ./backend/services/complex/cancel_booking
+    image: ghcr.io/weishenl/g4t4-is213-cancel-booking-service:latest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      reservation-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - PORT=5000
+      - USER_SERVICE_URL=http://user-service:5000
+      - RESERVATION_SERVICE_URL=http://reservation-service:5000
+      - ORDER_SERVICE_URL=http://order-service:5000
+      - PAYMENT_SERVICE_URL=http://payment-service:5000
+      - NOTIFICATION_SERVICE_URL=http://notification-service:5000
+      - REALLOCATE_RESERVATION_SERVICE_URL=http://reallocate-reservation-service:5000
+    env_file:
+      - ./backend/.env
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  reallocate-reservation-service:
+    build: ./backend/services/complex/reallocate_reservation
+    image: ghcr.io/weishenl/g4t4-is213-reallocate-reservation-service:latest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      reservation-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - PORT=5000
+      - USER_SERVICE_URL=http://user-service:5000
+      - RESERVATION_SERVICE_URL=http://reservation-service:5000
+      - NOTIFICATION_SERVICE_URL=http://notification-service:5000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5009:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  driver-status-service:
+    build: ./backend/services/complex/driver_status
+    image: ghcr.io/weishenl/g4t4-is213-driver-status-service:latest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      driver-service:
+        condition: service_started
+      driver-details-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - PORT=5000
+      - DRIVER_SERVICE_URL=http://driver-service:5000
+      - DRIVER_DETAILS_SERVICE_URL=http://driver-details-service:5000
+      - USER_SERVICE_URL=http://user-service:5000
+      - ORDER_SERVICE_URL=http://order-service:5000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5015:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  dms-service:
+    build: ./backend/services/complex/dms
+    image: ghcr.io/weishenl/g4t4-is213-dms-service:latest
+    depends_on:
+      driver-service:
+        condition: service_started
+      driver-details-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      restaurant-service:
+        condition: service_started
+      geo-service:
+        condition: service_started
+    environment:
+      - PORT=5000
+      - DRIVER_SERVICE_URL=http://driver-service:5000
+      - DRIVER_DETAILS_SERVICE_URL=http://driver-details-service:5000
+      - USER_SERVICE_URL=http://user-service:5000
+      - ORDER_SERVICE_URL=http://order-service:5000
+      - RESTAURANT_SERVICE_URL=http://restaurant-service:5000
+      - GEOCODING_SERVICE_URL=http://geo-service:5000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5014:5000"
+    restart: on-failure
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+volumes:
+  kong_pgdata:
+    name: kong_pgdata
+  supabase-db-data:
+    name: supabase-db-data
+
+networks:
+  feastfinder-network:
+    name: feastfinder-network
+    driver: bridge
+  supabase-network:
+    name: feastfinder-supabase-network
+    driver: bridge
