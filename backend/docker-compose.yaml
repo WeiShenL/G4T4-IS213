@@ -114,6 +114,7 @@ services:
   
   rabbitmq-setup:
     build: ./rabbitmq
+    image: ghcr.io/weishenl/g4t4-is213-rabbitmq-setup:latest
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -126,6 +127,7 @@ services:
 
   menu-service:
     build: ./services/simple/menu
+    image: ghcr.io/weishenl/g4t4-is213-menu-service:latest
     deploy:
       replicas: 1
       restart_policy:
@@ -143,6 +145,7 @@ services:
 
   reservation-service:
     build: ./services/simple/reservation
+    image: ghcr.io/weishenl/g4t4-is213-reservation-service:latest
     environment:
       - PORT=5000
     env_file:
@@ -156,6 +159,7 @@ services:
 
   order-service:
     build: ./services/simple/order
+    image: ghcr.io/weishenl/g4t4-is213-order-service:latest
     deploy:
       replicas: 1
       restart_policy:
@@ -173,6 +177,7 @@ services:
 
   restaurant-service:
     build: ./services/simple/restaurant
+    image: ghcr.io/weishenl/g4t4-is213-restaurant-service:latest
     deploy:
       replicas: 1
       restart_policy:
@@ -190,6 +195,7 @@ services:
 
   user-service:
     build: ./services/simple/user
+    image: ghcr.io/weishenl/g4t4-is213-user-service:latest
     environment:
       - PORT=5000
     env_file:
@@ -203,6 +209,7 @@ services:
 
   notification-service:
     build: ./services/simple/notification
+    image: ghcr.io/weishenl/g4t4-is213-notification-service:latest
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -221,6 +228,7 @@ services:
 
   payment-service:
     build: ./services/simple/payment
+    image: ghcr.io/weishenl/g4t4-is213-payment-service:latest
     environment:
       - PORT=5000
     env_file:
@@ -234,6 +242,7 @@ services:
 
   waitlist-service:
     build: ./services/simple/waitlist
+    image: ghcr.io/weishenl/g4t4-is213-waitlist-service:latest
     environment:
       - PORT=5000
     env_file:
@@ -247,6 +256,7 @@ services:
 
   create-booking-service:
     build: ./services/complex/create_booking
+    image: ghcr.io/weishenl/g4t4-is213-create-booking-service:latest
     deploy:
       replicas: 1
       restart_policy:
@@ -292,6 +302,7 @@ services:
   
   accept-reallocation-service:
     build: ./services/complex/accept_reallocation
+    image: ghcr.io/weishenl/g4t4-is213-accept-reallocation-service:latest
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -324,6 +335,7 @@ services:
 
   cancel-booking-service:
     build: ./services/complex/cancel_booking
+    image: ghcr.io/weishenl/g4t4-is213-cancel-booking-service:latest
     deploy:
       replicas: 1
       restart_policy:
@@ -360,6 +372,7 @@ services:
 
   reallocate-reservation-service:
     build: ./services/complex/reallocate_reservation
+    image: ghcr.io/weishenl/g4t4-is213-reallocate-reservation-service:latest
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -388,6 +401,7 @@ services:
   # User Scenario 3 Services
   driver-service:
     build: ./services/simple/driver
+    image: ghcr.io/weishenl/g4t4-is213-driver-service:latest
     environment:
       - PORT=5000
     env_file:
@@ -401,6 +415,7 @@ services:
 
   driver-details-service:
     build: ./services/simple/driver_details
+    image: ghcr.io/weishenl/g4t4-is213-driver-details-service:latest
     environment:
       - PORT=5000
     env_file:
@@ -414,6 +429,7 @@ services:
 
   geo-service:
     build: ./services/simple/geo
+    image: ghcr.io/weishenl/g4t4-is213-geo-service:latest
     environment:
       - PORT=5000
     env_file:
@@ -427,6 +443,7 @@ services:
 
   driver-status-service:
     build: ./services/complex/driver_status
+    image: ghcr.io/weishenl/g4t4-is213-driver-status-service:latest
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -457,6 +474,7 @@ services:
 
   dms-service:
     build: ./services/complex/dms
+    image: ghcr.io/weishenl/g4t4-is213-dms-service:latest
     depends_on:
       driver-service:
         condition: service_started

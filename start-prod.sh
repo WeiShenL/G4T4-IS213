@@ -92,7 +92,15 @@ docker exec supabase-db psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload s
 # Step 3: Start application services with production overrides
 echo -e "\n${YELLOW}Step 3: Starting FeastFinder application services (Production Mode)...${NC}"
 cd "$SCRIPT_DIR"
-docker compose -f docker-compose.yaml -f backend/docker-compose.prod.yml up -d --build
+
+echo "Attempting to pull pre-built production images from GHCR..."
+if docker compose -f docker-compose.yaml -f backend/docker-compose.prod.yml pull 2>/dev/null; then
+    echo -e "${GREEN}Pre-built images pulled successfully from GHCR!${NC}"
+    docker compose -f docker-compose.yaml -f backend/docker-compose.prod.yml up -d
+else
+    echo -e "${YELLOW}GHCR images missing or unavailable — building services locally from source code...${NC}"
+    docker compose -f docker-compose.yaml -f backend/docker-compose.prod.yml up -d --build
+fi
 
 echo -e "\n${GREEN}=========================================="
 echo "All production services started successfully!"

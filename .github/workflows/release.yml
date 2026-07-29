@@ -1,14 +1,21 @@
 name: Automated GitHub Release
 
 on:
+  pull_request:
+    types: [closed]
+    branches: [main]
   push:
-    branches: [ main ]
     tags:
       - 'v*'
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
     name: Create GitHub Release
+    if: github.event_name == 'push' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -22,11 +29,15 @@ jobs:
       - name: Extract Dynamic Release Version Tag
         id: vars
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           else
             # Fetch latest git tag (defaults to v1.0.0 if none)
             LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+            if ! [[ "$LATEST_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Latest tag '$LATEST_TAG' is not strict semver (vX.Y.Z) — cannot auto-increment. Push a manual vX.Y.Z tag instead." >&2
+              exit 1
+            fi
             # Parse SemVer vX.Y.Z and auto-increment patch digit Z (e.g. v1.0.0 -> v1.0.1)
             VERSION_NUM="${LATEST_TAG#v}"
             MAJOR_MINOR=$(echo "$VERSION_NUM" | awk -F. '{print $1"."$2}')
