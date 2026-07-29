@@ -22,7 +22,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Stop application services
 echo -e "\n${YELLOW}Stopping production application services...${NC}"
 cd "$SCRIPT_DIR"
-docker compose -f docker-compose.yaml -f backend/docker-compose.prod.yml down
+docker compose -f docker-compose.yaml -f docker-compose.prod.yaml down
 
 # Stop Supabase
 echo -e "\n${YELLOW}Stopping Supabase services...${NC}"

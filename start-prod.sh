@@ -94,12 +94,12 @@ echo -e "\n${YELLOW}Step 3: Starting FeastFinder application services (Productio
 cd "$SCRIPT_DIR"
 
 echo "Attempting to pull pre-built production images from GHCR..."
-if docker compose -f docker-compose.yaml -f backend/docker-compose.prod.yml pull 2>/dev/null; then
+if docker compose -f docker-compose.yaml -f docker-compose.prod.yaml pull 2>/dev/null; then
     echo -e "${GREEN}Pre-built images pulled successfully from GHCR!${NC}"
-    docker compose -f docker-compose.yaml -f backend/docker-compose.prod.yml up -d
+    docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d
 else
     echo -e "${YELLOW}GHCR images missing or unavailable — building services locally from source code...${NC}"
-    docker compose -f docker-compose.yaml -f backend/docker-compose.prod.yml up -d --build
+    docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d --build
 fi
 
 echo -e "\n${GREEN}=========================================="

@@ -1,5 +1,5 @@
 # Production Overrides for FeastFinder Stack
-# Usage: docker compose -f docker-compose.yaml -f docker-compose.prod.yml up -d
+# Usage: docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d
 
 x-logging: &default-logging
   driver: "json-file"
@@ -102,7 +102,7 @@ services:
   frontend:
     logging: *default-logging
     build:
-      context: ../frontend
+      context: ./frontend
       dockerfile: Dockerfile
     ports:
       - "8080:80"

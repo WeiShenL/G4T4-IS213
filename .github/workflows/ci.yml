@@ -1,8 +1,6 @@
 name: CI Build Verification
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
     branches: [ main ]
 
@@ -48,4 +46,4 @@ jobs:
 
       - name: Build Verification of Docker Stack
         run: |
-          docker compose -f docker-compose.yaml build
+          docker compose -f docker-compose.yaml -f docker-compose.prod.yaml build
