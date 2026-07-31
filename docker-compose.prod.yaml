@@ -7,29 +7,36 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+# Watchtower only updates containers carrying this label
+# (WATCHTOWER_LABEL_ENABLE=true on the root stack).
+# Deliberately NOT applied to supabase-db, kong-database, kong, rabbitmq or any
+# pinned Supabase image: auto-pulling a new major over a live data directory
+# risks irreversible corruption.
+x-watchtower: &watchtower-enabled
+  com.centurylinklabs.watchtower.enable: "true"
+
 services:
   # Supabase Core: Restrict DB, Auth & API Gateway host ports
   supabase-db:
     logging: *default-logging
-    ports:
+    ports: !override
       - "127.0.0.1:5433:5432"
 
   supabase-auth:
     logging: *default-logging
-    ports: []
+    ports: !reset []
 
   supabase-rest:
     logging: *default-logging
-    ports: []
+    ports: !reset []
 
   realtime-dev:
     logging: *default-logging
-    ports: []
+    ports: !reset []
 
   supabase-kong:
     logging: *default-logging
-    ports:
-      - "8100:8000"
+    ports: !reset []
 
   # Disable Supabase Studio & Meta in Production Mode
   supabase-studio:
@@ -38,7 +45,7 @@ services:
       - disabled
     deploy:
       replicas: 0
-    ports: []
+    ports: !reset []
 
   supabase-meta:
     logging: *default-logging
@@ -46,106 +53,151 @@ services:
       - disabled
     deploy:
       replicas: 0
-    ports: []
+    ports: !reset []
 
   # Kong Postgres DB: Restrict to localhost only
   kong-database:
     logging: *default-logging
-    ports:
+    ports: !override
       - "127.0.0.1:5432:5432"
 
-  # Kong API Gateway: Public proxy on 8000, Admin ports restricted to localhost
+  # Kong API Gateway: Zero public ports, Admin ports restricted to localhost
   kong:
     logging: *default-logging
-    ports:
-      - "8000:8000"
+    ports: !override
       - "127.0.0.1:8001:8001"
       - "127.0.0.1:8002:8002"
 
-  # RabbitMQ: AMQP & Management UI restricted to localhost
+  # RabbitMQ: Restricted internal network access only
   rabbitmq:
     logging: *default-logging
-    ports:
+    ports: !override
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:15672:15672"
 
+
+
   rabbitmq-setup:
     logging: *default-logging
+    labels: *watchtower-enabled
 
   # Microservices: Remove all host port exposure & cap log rotation
   reservation-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   user-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   notification-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   payment-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   waitlist-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   accept-reallocation-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   reallocate-reservation-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   driver-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   driver-details-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   geo-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   driver-status-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   dms-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   create-booking-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   cancel-booking-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   menu-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   restaurant-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
   order-service:
     logging: *default-logging
-    ports: []
+    labels: *watchtower-enabled
+    ports: !reset []
 
-  # Production Frontend: Build multi-stage Caddy container (zero Node.js runtime)
+  # Production Frontend: Caddy production container pulled from GHCR
   frontend:
     logging: *default-logging
-    build:
+    labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-frontend:latest
+    # Base uses Dockerfile.dev (Vite HMR). Compose MERGES build config, so without
+    # an explicit override here prod would inherit Dockerfile.dev and ship the dev
+    # server with no runtime env injection.
+    build: !override
       context: ./frontend
       dockerfile: Dockerfile
-    ports:
-      - "8080:80"
+    # Base bind-mounts host source for HMR. Must not leak into prod, or the host
+    # tree would be mounted over the built static assets.
+    volumes: !reset []
+    ports: !reset []
+
+
+  # Production Caddy Unified Gateway Edge
+  # Public ports 80/443 are owned by Root Caddy
+  caddy:
+    logging: *default-logging
+    labels: *watchtower-enabled
+    env_file:
+      - ./frontend/.env
+    ports: !reset []
+    networks:
+      - default
+      - web-gateway
+
+networks:
+  web-gateway:
+    external: true
+
+

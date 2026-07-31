@@ -18,7 +18,7 @@ services:
     ports:
       - "5433:5432"
     env_file:
-      - ./backend/supabase/.env
+      - ./.env
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-password}
@@ -48,7 +48,7 @@ services:
       supabase-db:
         condition: service_healthy
     env_file:
-      - ./backend/supabase/.env
+      - ./.env
     environment:
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: 9999
@@ -91,7 +91,7 @@ services:
       supabase-db:
         condition: service_healthy
     env_file:
-      - ./backend/supabase/.env
+      - ./.env
     environment:
       PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:-your-super-secret-password}@supabase-db:5432/postgres
       PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS:-public,storage,graphql_public}
@@ -111,7 +111,7 @@ services:
       supabase-db:
         condition: service_healthy
     env_file:
-      - ./backend/supabase/.env
+      - ./.env
     environment:
       PORT: 4000
       DB_HOST: supabase-db
@@ -150,7 +150,7 @@ services:
       - "8100:8000"
       - "8101:8443"
     env_file:
-      - ./backend/supabase/.env
+      - ./.env
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
@@ -160,8 +160,25 @@ services:
       KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
       SUPABASE_ANON_KEY: ${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
       SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
+    # Kong 2.8 does not interpolate env vars in declarative config, so kong.yml
+    # previously hardcoded the demo ANON_KEY/SERVICE_ROLE_KEY — rotating keys in
+    # .env silently broke the gateway (every request 401). Mount the file as a
+    # template and expand $SUPABASE_* into the real config at startup, which is
+    # what upstream Supabase self-hosting does.
+    # NOTE: sed, not the upstream `eval "echo ..."` trick — that strips YAML
+    # quoting and turns _format_version: "2.1" into a number, which Kong rejects
+    # with 'in _format_version: expected a string'. sed touches only the two
+    # placeholders. ($$ is Compose escaping for a literal $.)
+    entrypoint:
+      - sh
+      - -c
+      - |
+        sed -e 's#\$$SUPABASE_ANON_KEY#'"$$SUPABASE_ANON_KEY"'#g' \
+            -e 's#\$$SUPABASE_SERVICE_KEY#'"$$SUPABASE_SERVICE_KEY"'#g' \
+            /home/kong/temp.yml > /home/kong/kong.yml
+        exec /docker-entrypoint.sh kong docker-start
     volumes:
-      - ./backend/supabase/kong.yml:/home/kong/kong.yml:ro
+      - ./backend/supabase/kong.yml:/home/kong/temp.yml:ro
     networks:
       - supabase-network
 
@@ -175,7 +192,7 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - ./backend/supabase/.env
+      - ./.env
     environment:
       STUDIO_PG_META_URL: http://supabase-meta:8080
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-password}
@@ -200,7 +217,7 @@ services:
       supabase-db:
         condition: service_healthy
     env_file:
-      - ./backend/supabase/.env
+      - ./.env
     environment:
       PG_META_PORT: 8080
       PG_META_DB_HOST: supabase-db
@@ -321,15 +338,44 @@ services:
       - feastfinder-network
 
   # ===========================================
+  # UNIFIED CADDY GATEWAY (Single Entrypoint Edge)
+  # ===========================================
+  caddy:
+    container_name: g4t4-caddy
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    # ALLOWED_ORIGIN comes from backend/.env via env_file below.
+    # Do NOT re-declare it under `environment:` as ${ALLOWED_ORIGIN:-*}:
+    # `${...}` interpolates from the shell or a project-root .env (neither of
+    # which defines it), so it always collapsed to "*" — and `environment:`
+    # outranks `env_file:`, silently overriding the real value.
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - frontend
+      - kong
+      - supabase-kong
+    networks:
+      - feastfinder-network
+      - supabase-network
+
+  # ===========================================
   # FRONTEND (Local Dev Vite HMR)
   # ===========================================
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    image: ghcr.io/weishenl/g4t4-is213-frontend:latest
+    # Local-only dev tag. Must NOT reuse the GHCR production tag, or a local dev
+    # build would overwrite the pulled production image in the local cache.
+    # docker-compose.prod.yaml overrides this with the real GHCR image.
+    image: g4t4-is213-frontend:dev
     ports:
-      - "5173:5173"
+      - "5173:80"
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
@@ -341,6 +387,7 @@ services:
       - feastfinder-network
     depends_on:
       - kong
+
 
   # ===========================================
   # SIMPLE MICROSERVICES

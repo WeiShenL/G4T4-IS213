@@ -29,9 +29,9 @@ Follow these steps to set up the FeastFinder application on your local machine:
 ### 1. Setup Environment Files
 ```bash
 # Copy env templates
-cp backend/.env.example backend/.env
-cp backend/supabase/.env.example backend/supabase/.env
-cp frontend/.env.example frontend/.env
+cp .env.example .env                    # Supabase/Postgres config + Compose interpolation
+cp backend/.env.example backend/.env    # microservice runtime config
+cp frontend/.env.example frontend/.env  # browser client config
 ```
 
 ### 2. Option A: Native Local Stack (Recommended for Dev)
@@ -39,25 +39,45 @@ Launch the entire stack (Supabase, 17 microservices, Kong Gateway, RabbitMQ, and
 ```bash
 docker compose up -d
 ```
-The application will be available at [http://localhost:5173](http://localhost:5173).
+The application will be available at [http://localhost:8080](http://localhost:8080).
 
-### 3. Option B: Production Containerized Mode (Caddy Web Server)
-Launch the hardened production stack (Multi-stage Caddy container for frontend, zero Node.js runtime, restricted admin ports):
+### 3. Option B: Production Containerized Mode (Zero-Trust Hardened Caddy Edge)
+Launch the hardened production stack (Multi-stage Caddy container for frontend, zero Node.js runtime, zero exposed microservice ports):
 ```bash
 docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d
 ```
-The production application will be available at [http://localhost:8080](http://localhost:8080).
+> **Note:** production mode publishes **no host ports** — that is the point. Every
+> service is reachable only inside the `web-gateway` Docker network, and a reverse
+> proxy in front of the stack owns the public ports. So `localhost:8080` does **not**
+> work in this mode.
+>
+> To reach it locally, either run a quick in-network check:
+>
+> ```bash
+> docker run --rm --network web-gateway curlimages/curl:latest \
+>   -s -o /dev/null -w '%{http_code}\n' http://g4t4-caddy/
+> ```
+>
+> or stand up a local root Caddy so you can use a browser and exercise the same proxy
+> hop the VPS uses — see the "Local testing variant" section of `ROOT-STACK-PLAN.md`.
+>
+> On the VPS the stack is served at `https://feast.weishenlo.com` via the root Caddy.
 
 ---
 
 ### Access Points
-| Service | Local Dev URL | Production Container URL |
-|---------|---------------|--------------------------|
-| Frontend UI | http://localhost:5173 (Vite HMR) | http://localhost:8080 (Caddy) |
-| Kong API Gateway | http://localhost:8000 | http://localhost:8000 |
-| Supabase Studio | http://localhost:3000 | Disabled (N/A) |
-| Supabase API | http://localhost:8100 | http://localhost:8100 |
-| RabbitMQ Console | http://localhost:15672 (guest/guest) | http://localhost:15672 |
+| Service | Local Dev URL | Production Mode |
+|:---|:---|:---|
+| **Unified Single Entrypoint** | **http://localhost:8080** | no host port — via root Caddy only |
+| Kong API Gateway | Internal Proxy (`/api/*`) | internal only (`!reset []`) |
+| Supabase Auth & REST | Internal Proxy (`/auth/*`, `/rest/*`) | internal only (`!reset []`) |
+| Supabase Studio | http://localhost:3000 | disabled (`replicas: 0`) |
+| RabbitMQ Console | http://localhost:15672 (guest/guest) | `127.0.0.1:15672` (loopback only) |
+
+In production mode the only services with host bindings are `supabase-db`,
+`kong-database`, `kong` (admin), and `rabbitmq` — all bound to `127.0.0.1` for
+shell access, none publicly reachable. Everything else is reached over the
+`web-gateway` network by the root Caddy.
 
 ### Stop All Services
 ```bash

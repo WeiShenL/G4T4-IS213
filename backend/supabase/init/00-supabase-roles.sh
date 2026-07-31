@@ -49,10 +49,58 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 -- auth schema: GoTrue's first migration tries to CREATE TABLE auth.users
 -- but does not CREATE SCHEMA itself — supabase/postgres image normally does this.
 CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_auth_admin;
+-- This MUST mirror GoTrue's 00_init_auth_schema migration column-for-column.
+-- GoTrue uses CREATE TABLE IF NOT EXISTS, so if this stub is missing columns the
+-- real definition is silently skipped and every later migration dies with
+-- 'column "instance_id" does not exist'. Later GoTrue migrations use
+-- ALTER TABLE ADD COLUMN, which apply cleanly on top of this.
 CREATE TABLE IF NOT EXISTS auth.users (
-  id uuid NOT NULL PRIMARY KEY,
-  raw_user_meta_data jsonb
+  instance_id uuid NULL,
+  id uuid NOT NULL UNIQUE,
+  aud varchar(255) NULL,
+  "role" varchar(255) NULL,
+  email varchar(255) NULL UNIQUE,
+  encrypted_password varchar(255) NULL,
+  confirmed_at timestamptz NULL,
+  invited_at timestamptz NULL,
+  confirmation_token varchar(255) NULL,
+  confirmation_sent_at timestamptz NULL,
+  recovery_token varchar(255) NULL,
+  recovery_sent_at timestamptz NULL,
+  email_change_token varchar(255) NULL,
+  email_change varchar(255) NULL,
+  email_change_sent_at timestamptz NULL,
+  last_sign_in_at timestamptz NULL,
+  raw_app_meta_data jsonb NULL,
+  raw_user_meta_data jsonb NULL,
+  is_super_admin bool NULL,
+  created_at timestamptz NULL,
+  updated_at timestamptz NULL,
+  CONSTRAINT users_pkey PRIMARY KEY (id)
 );
+-- This script runs as \$POSTGRES_USER (postgres), so the stub table above is owned
+-- by postgres. GoTrue connects as supabase_auth_admin and its 00_init migration
+-- ALTERs/COMMENTs auth.users, which requires ownership — without this the auth
+-- container crash-loops with 'must be owner of table users' (SQLSTATE 42501) on
+-- every fresh volume. Reassign so GoTrue can complete its migrations.
+ALTER TABLE auth.users OWNER TO supabase_auth_admin;
+
+-- auth.uid() / auth.role() are normally created by GoTrue's 00_init migration,
+-- which runs only when the auth container starts — i.e. AFTER these init scripts.
+-- 04-rls-policies.sql calls auth.uid() during init, so without these stubs it
+-- fails with 'function auth.uid() does not exist' and every RLS policy is skipped,
+-- leaving tables unprotected. Definitions match GoTrue's exactly, so its
+-- 'create or replace' is a clean no-op; ownership lets it replace them.
+CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid AS \$FN\$
+  select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
+\$FN\$ LANGUAGE sql STABLE;
+ALTER FUNCTION auth.uid() OWNER TO supabase_auth_admin;
+
+CREATE OR REPLACE FUNCTION auth.role() RETURNS text AS \$FN\$
+  select nullif(current_setting('request.jwt.claim.role', true), '')::text;
+\$FN\$ LANGUAGE sql STABLE;
+ALTER FUNCTION auth.role() OWNER TO supabase_auth_admin;
+
 GRANT ALL ON SCHEMA auth TO supabase_auth_admin;
 GRANT ALL ON ALL TABLES IN SCHEMA auth TO supabase_auth_admin;
 GRANT USAGE ON SCHEMA auth TO authenticated, anon, service_role;

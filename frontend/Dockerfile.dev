@@ -9,7 +9,7 @@ RUN npm install
 # Copy application source
 COPY . .
 
-EXPOSE 5173
+EXPOSE 80
 
-# Run Vite dev server bound to all interfaces for container access
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+# Run Vite dev server bound to all interfaces on port 80 for container access
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "80"]
