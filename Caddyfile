@@ -1,0 +1,78 @@
+# G4T4 Unified Gateway Configuration (Port 80 / 443)
+(common) {
+  encode gzip zstd
+
+  # Centralized CORS and Security headers
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "SAMEORIGIN"
+    X-XSS-Protection "1; mode=block"
+  # this is controlled in backend/.env
+    Access-Control-Allow-Origin "{$ALLOWED_ORIGIN:*}"
+    Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    Access-Control-Allow-Headers "Content-Type, Authorization, x-supabase-api-version, apikey, x-client-info, Prefer, Range"
+    Access-Control-Expose-Headers "Authorization, Content-Range, Content-Type, X-Request-Id, apikey"
+    -Server
+  }
+
+  # Global OPTIONS preflight interceptor
+  @options method OPTIONS
+  handle @options {
+    respond 204
+  }
+}
+
+:80 {
+  import common
+
+  # NOTE: No HTTP->HTTPS redirect here by design.
+  # This gateway always sits behind the root Caddy, which terminates TLS and
+  # performs the HTTPS redirect itself. Redirecting again here would bounce the
+  # request back to the root Caddy and loop forever (ERR_TOO_MANY_REDIRECTS),
+  # because the root proxies over plain HTTP while preserving the public Host.
+
+  # API Traffic -> Kong API Gateway (Internal)
+  handle /api/* {
+    reverse_proxy kong:8000 {
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+
+  # Supabase Auth Traffic
+  handle /auth/* {
+    reverse_proxy supabase-kong:8000 {
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+
+  # Supabase PostgREST Traffic
+  handle /rest/* {
+    reverse_proxy supabase-kong:8000 {
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+
+  # Supabase Realtime WebSocket Traffic
+  handle /realtime/* {
+    reverse_proxy supabase-kong:8000 {
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+
+  # Frontend SPA Fallback
+  handle /* {
+    reverse_proxy frontend:80 {
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+}
