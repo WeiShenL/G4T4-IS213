@@ -165,10 +165,6 @@ services:
     # .env silently broke the gateway (every request 401). Mount the file as a
     # template and expand $SUPABASE_* into the real config at startup, which is
     # what upstream Supabase self-hosting does.
-    # NOTE: sed, not the upstream `eval "echo ..."` trick — that strips YAML
-    # quoting and turns _format_version: "2.1" into a number, which Kong rejects
-    # with 'in _format_version: expected a string'. sed touches only the two
-    # placeholders. ($$ is Compose escaping for a literal $.)
     entrypoint:
       - sh
       - -c
