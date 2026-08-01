@@ -1,4 +1,4 @@
-# G4T4 Unified Gateway Configuration (Port 80 / 443)
+# G4T4 Unified Gateway Configuration. (Port 80 / 443)
 {
   # This gateway only ever receives traffic from the root Caddy on the internal
   # docker network. Trusting it means Caddy preserves the X-Forwarded-Proto /
