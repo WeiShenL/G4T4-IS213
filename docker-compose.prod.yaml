@@ -9,9 +9,10 @@ x-logging: &default-logging
 
 # Watchtower only updates containers carrying this label
 # (WATCHTOWER_LABEL_ENABLE=true on the root stack).
-# Deliberately NOT applied to supabase-db, kong-database, kong, rabbitmq or any
-# pinned Supabase image: auto-pulling a new major over a live data directory
-# risks irreversible corruption.
+#
+# Applied ONLY to the 19 first-party images .github/workflows/release.yml
+# publishes. Every third-party image is excluded: supabase-*, kong,
+# kong-database, rabbitmq, and caddy.
 x-watchtower: &watchtower-enabled
   com.centurylinklabs.watchtower.enable: "true"
 
@@ -80,91 +81,109 @@ services:
   rabbitmq-setup:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-rabbitmq-setup:latest
 
   # Microservices: Remove all host port exposure & cap log rotation
   reservation-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-reservation-service:latest
     ports: !reset []
 
   user-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-user-service:latest
     ports: !reset []
 
   notification-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-notification-service:latest
     ports: !reset []
 
   payment-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-payment-service:latest
     ports: !reset []
 
   waitlist-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-waitlist-service:latest
     ports: !reset []
 
   accept-reallocation-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-accept-reallocation-service:latest
     ports: !reset []
 
   reallocate-reservation-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-reallocate-reservation-service:latest
     ports: !reset []
 
   driver-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-driver-service:latest
     ports: !reset []
 
   driver-details-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-driver-details-service:latest
     ports: !reset []
 
   geo-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-geo-service:latest
     ports: !reset []
 
   driver-status-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-driver-status-service:latest
     ports: !reset []
 
   dms-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-dms-service:latest
     ports: !reset []
 
   create-booking-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-create-booking-service:latest
     ports: !reset []
 
   cancel-booking-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-cancel-booking-service:latest
     ports: !reset []
 
   menu-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-menu-service:latest
     ports: !reset []
 
   restaurant-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-restaurant-service:latest
     ports: !reset []
 
   order-service:
     logging: *default-logging
     labels: *watchtower-enabled
+    image: ghcr.io/weishenl/g4t4-is213-order-service:latest
     ports: !reset []
 
   # Production Frontend: Caddy production container pulled from GHCR
@@ -188,7 +207,6 @@ services:
   # Public ports 80/443 are owned by Root Caddy
   caddy:
     logging: *default-logging
-    labels: *watchtower-enabled
     env_file:
       - ./frontend/.env
     ports: !reset []

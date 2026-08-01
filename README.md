@@ -24,51 +24,111 @@ Ensure you have the following installed:
 
 ## Getting Started
 
-Follow these steps to set up the FeastFinder application on your local machine:
+There are two ways to run FeastFinder locally. **Option A (Dev)** is what you want
+unless you are specifically testing the production deployment.
 
-### 1. Setup Environment Files
+---
+
+### Option A: Development Mode — Vite Hot-Module-Reloading
+
+Runs Supabase, 17 microservices, Kong Gateway, RabbitMQ, and the frontend as a live
+Vite dev server. Edit a file and the browser updates without a rebuild.
+
 ```bash
-# Copy env templates
+# 1. Clone
+git clone https://github.com/WeiShenL/G4T4-IS213.git
+cd G4T4-IS213
+
+# 2. Seed the env files — the defaults are already set for dev, no edits needed
 cp .env.example .env                    # Supabase/Postgres config + Compose interpolation
 cp backend/.env.example backend/.env    # microservice runtime config
 cp frontend/.env.example frontend/.env  # browser client config
-```
 
-### 2. Option A: Native Local Stack (Recommended for Dev)
-Launch the entire stack (Supabase, 17 microservices, Kong Gateway, RabbitMQ, and Frontend with **Vite Hot-Module-Reloading**):
-```bash
+# 3. Start
 docker compose up -d
 ```
-The application will be available at [http://localhost:8080](http://localhost:8080).
 
-### 3. Option B: Production Containerized Mode (Zero-Trust Hardened Caddy Edge)
-Launch the hardened production stack (Multi-stage Caddy container for frontend, zero Node.js runtime, zero exposed microservice ports):
+Open **[http://localhost:8080](http://localhost:8080)**. That's it.
+
+> Stripe and Google Maps keys are left as placeholders in `frontend/.env` — the app
+> boots and browses fine without them; only checkout and the map views need real ones.
+
+> Vite is also exposed directly on [http://localhost:5173](http://localhost:5173), but
+> prefer `:8080`. Both serve the same container and both hot-reload — only `:8080` goes
+> through the gateway that routes `/api/*`, `/auth/*` and `/rest/*` to the backend, so
+> on `:5173` every API call 404s.
+
+Stop with `docker compose down`.
+
+---
+
+### Option B: Production Mode, Run Locally (Zero-Trust Hardened Caddy Edge)
+
+Runs exactly what the VPS runs: the frontend as a multi-stage static Caddy build with
+no Node.js runtime, and **no host ports on anything**. Because nothing is published to
+`localhost`, you need the shared edge proxy in front of it — so this stack goes up
+*second*, after the proxy.
+
+**Step 1 — Clone and start the local edge proxy** ([vps-infra-portfolio](https://github.com/WeiShenL/vps-infra-portfolio)):
+
 ```bash
+git clone https://github.com/WeiShenL/vps-infra-portfolio.git
+cd vps-infra-portfolio
+docker compose -f docker-compose.local.yaml up -d
+```
+
+This starts a root Caddy on host port `8080` and **creates the shared `web-gateway`
+Docker network** that the app stack attaches to. No separate `docker network create`
+is needed.
+
+**Step 2 — Point the frontend at the Option B origin.**
+
+In `frontend/.env`, comment out the two `localhost:8080` lines and uncomment the two
+`feast.localhost:8080` lines directly beneath them. Both are already in the file with
+instructions — you are just flipping which pair is active.
+
+These are baked into the bundle at build time and must match the URL in your address
+bar exactly, or you get CORS origin errors (a misleading symptom — it looks like the
+backend is down, not misconfigured).
+
+**Step 3 — Start FeastFinder in production mode:**
+
+```bash
+cd ../G4T4-IS213          # clone it first if you haven't (see Option A step 1)
 docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d
 ```
-> **Note:** production mode publishes **no host ports** — that is the point. Every
-> service is reachable only inside the `web-gateway` Docker network, and a reverse
-> proxy in front of the stack owns the public ports. So `localhost:8080` does **not**
-> work in this mode.
->
-> To reach it locally, either run a quick in-network check:
->
-> ```bash
-> docker run --rm --network web-gateway curlimages/curl:latest \
->   -s -o /dev/null -w '%{http_code}\n' http://g4t4-caddy/
-> ```
->
-> or stand up a local root Caddy so you can use a browser and exercise the same proxy
-> hop the VPS uses — see the "Local testing variant" section of `ROOT-STACK-PLAN.md`.
->
-> On the VPS the stack is served at `https://feast.weishenlo.com` via the root Caddy.
+
+**Step 4 — Browse [http://feast.localhost:8080](http://feast.localhost:8080)**
+
+Browsers resolve `*.localhost` to `127.0.0.1` on their own, so there is no `/etc/hosts`
+edit to make. The request goes: browser → root Caddy (`:8080`) → `g4t4-caddy` → the
+stack, which is the same proxy hop the VPS performs.
+
+> **Do not add `--build`.** Without it, compose reuses a local image if present, pulls
+> from GHCR if not, and only compiles from source when the pull fails — which is what
+> happens on Apple Silicon, since the published images are `linux/amd64` only. The same
+> command runs unchanged on the VPS. See "How images are named" in `STARTUP.md`.
+
+> **Don't run Option A and Option B at the same time.** Both want host port `8080` — in
+> dev it's `g4t4-caddy` directly, in prod it's the root Caddy. `docker compose down`
+> the other one first.
+
+To check the stack without a browser:
+
+```bash
+docker run --rm --network web-gateway curlimages/curl:latest \
+  -s -o /dev/null -w '%{http_code}\n' http://g4t4-caddy/
+```
+
+On the VPS the same stack is served at `https://feast.weishenlo.com` via the root Caddy.
 
 ---
 
 ### Access Points
-| Service | Local Dev URL | Production Mode |
+| Service | Option A — Dev | Option B — Prod (local) |
 |:---|:---|:---|
-| **Unified Single Entrypoint** | **http://localhost:8080** | no host port — via root Caddy only |
+| **Unified Single Entrypoint** | **http://localhost:8080** | **http://feast.localhost:8080** (via root Caddy) |
+| Vite dev server (direct, no API) | http://localhost:5173 | n/a — static build, no dev server |
 | Kong API Gateway | Internal Proxy (`/api/*`) | internal only (`!reset []`) |
 | Supabase Auth & REST | Internal Proxy (`/auth/*`, `/rest/*`) | internal only (`!reset []`) |
 | Supabase Studio | http://localhost:3000 | disabled (`replicas: 0`) |
@@ -81,12 +141,18 @@ shell access, none publicly reachable. Everything else is reached over the
 
 ### Stop All Services
 ```bash
-# Stop local dev stack:
+# Option A — dev stack:
 docker compose down
 
-# Stop production stack:
+# Option B — production stack:
 docker compose -f docker-compose.yaml -f docker-compose.prod.yaml down
+
+# ...and the local edge proxy, if you started it:
+cd ../vps-infra-portfolio && docker compose -f docker-compose.local.yaml down
 ```
+> Add `-v` to the FeastFinder commands to also wipe the database. You will need to
+> re-run the env setup steps before the next `up`, since `POSTGRES_PASSWORD` is only
+> applied when Postgres first creates its data directory.
 
 ## Technical Architecture Diagram
 <img width="809" alt="Screenshot 2025-04-11 at 7 25 24 AM" src="https://github.com/user-attachments/assets/c41e08a8-5bb9-4c39-b9f0-4b1fe3d71d7e" />

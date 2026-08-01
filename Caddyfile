@@ -1,4 +1,14 @@
 # G4T4 Unified Gateway Configuration (Port 80 / 443)
+{
+  # This gateway only ever receives traffic from the root Caddy on the internal
+  # docker network. Trusting it means Caddy preserves the X-Forwarded-Proto /
+  # X-Forwarded-For the root already set (https + the real client IP) instead of
+  # rewriting them from this hop's plain-HTTP connection.
+  servers {
+    trusted_proxies static private_ranges
+  }
+}
+
 (common) {
   encode gzip zstd
 
@@ -36,7 +46,6 @@
     reverse_proxy kong:8000 {
       header_up X-Real-IP {remote_host}
       header_up X-Forwarded-For {remote_host}
-      header_up X-Forwarded-Proto {scheme}
     }
   }
 
@@ -45,7 +54,6 @@
     reverse_proxy supabase-kong:8000 {
       header_up X-Real-IP {remote_host}
       header_up X-Forwarded-For {remote_host}
-      header_up X-Forwarded-Proto {scheme}
     }
   }
 
@@ -54,7 +62,6 @@
     reverse_proxy supabase-kong:8000 {
       header_up X-Real-IP {remote_host}
       header_up X-Forwarded-For {remote_host}
-      header_up X-Forwarded-Proto {scheme}
     }
   }
 
@@ -63,7 +70,6 @@
     reverse_proxy supabase-kong:8000 {
       header_up X-Real-IP {remote_host}
       header_up X-Forwarded-For {remote_host}
-      header_up X-Forwarded-Proto {scheme}
     }
   }
 
@@ -72,7 +78,6 @@
     reverse_proxy frontend:80 {
       header_up X-Real-IP {remote_host}
       header_up X-Forwarded-For {remote_host}
-      header_up X-Forwarded-Proto {scheme}
     }
   }
 }

@@ -318,7 +318,6 @@ services:
 
   rabbitmq-setup:
     build: ./backend/rabbitmq
-    image: ghcr.io/weishenl/g4t4-is213-rabbitmq-setup:latest
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -386,7 +385,6 @@ services:
   # ===========================================
   menu-service:
     build: ./backend/services/simple/menu
-    image: ghcr.io/weishenl/g4t4-is213-menu-service:latest
     depends_on:
       supabase-db:
         condition: service_healthy
@@ -401,7 +399,6 @@ services:
 
   reservation-service:
     build: ./backend/services/simple/reservation
-    image: ghcr.io/weishenl/g4t4-is213-reservation-service:latest
     depends_on:
       supabase-db:
         condition: service_healthy
@@ -418,7 +415,6 @@ services:
 
   order-service:
     build: ./backend/services/simple/order
-    image: ghcr.io/weishenl/g4t4-is213-order-service:latest
     depends_on:
       supabase-db:
         condition: service_healthy
@@ -433,7 +429,6 @@ services:
 
   restaurant-service:
     build: ./backend/services/simple/restaurant
-    image: ghcr.io/weishenl/g4t4-is213-restaurant-service:latest
     depends_on:
       supabase-db:
         condition: service_healthy
@@ -448,7 +443,6 @@ services:
 
   user-service:
     build: ./backend/services/simple/user
-    image: ghcr.io/weishenl/g4t4-is213-user-service:latest
     depends_on:
       supabase-db:
         condition: service_healthy
@@ -465,7 +459,6 @@ services:
 
   notification-service:
     build: ./backend/services/simple/notification
-    image: ghcr.io/weishenl/g4t4-is213-notification-service:latest
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -486,7 +479,6 @@ services:
 
   payment-service:
     build: ./backend/services/simple/payment
-    image: ghcr.io/weishenl/g4t4-is213-payment-service:latest
     depends_on:
       supabase-db:
         condition: service_healthy
@@ -503,7 +495,6 @@ services:
 
   waitlist-service:
     build: ./backend/services/simple/waitlist
-    image: ghcr.io/weishenl/g4t4-is213-waitlist-service:latest
     depends_on:
       supabase-db:
         condition: service_healthy
@@ -520,7 +511,6 @@ services:
 
   driver-service:
     build: ./backend/services/simple/driver
-    image: ghcr.io/weishenl/g4t4-is213-driver-service:latest
     depends_on:
       supabase-db:
         condition: service_healthy
@@ -537,7 +527,6 @@ services:
 
   driver-details-service:
     build: ./backend/services/simple/driver_details
-    image: ghcr.io/weishenl/g4t4-is213-driver-details-service:latest
     depends_on:
       supabase-db:
         condition: service_healthy
@@ -554,7 +543,6 @@ services:
 
   geo-service:
     build: ./backend/services/simple/geo
-    image: ghcr.io/weishenl/g4t4-is213-geo-service:latest
     depends_on:
       supabase-db:
         condition: service_healthy
@@ -574,7 +562,6 @@ services:
   # ===========================================
   create-booking-service:
     build: ./backend/services/complex/create_booking
-    image: ghcr.io/weishenl/g4t4-is213-create-booking-service:latest
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -612,7 +599,6 @@ services:
 
   accept-reallocation-service:
     build: ./backend/services/complex/accept_reallocation
-    image: ghcr.io/weishenl/g4t4-is213-accept-reallocation-service:latest
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -645,7 +631,6 @@ services:
 
   cancel-booking-service:
     build: ./backend/services/complex/cancel_booking
-    image: ghcr.io/weishenl/g4t4-is213-cancel-booking-service:latest
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -676,7 +661,6 @@ services:
 
   reallocate-reservation-service:
     build: ./backend/services/complex/reallocate_reservation
-    image: ghcr.io/weishenl/g4t4-is213-reallocate-reservation-service:latest
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -704,7 +688,6 @@ services:
 
   driver-status-service:
     build: ./backend/services/complex/driver_status
-    image: ghcr.io/weishenl/g4t4-is213-driver-status-service:latest
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -735,7 +718,6 @@ services:
 
   dms-service:
     build: ./backend/services/complex/dms
-    image: ghcr.io/weishenl/g4t4-is213-dms-service:latest
     depends_on:
       driver-service:
         condition: service_started
