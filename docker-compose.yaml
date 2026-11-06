@@ -392,7 +392,7 @@ services:
       - PORT=5000
     env_file:
       - ./backend/.env
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -408,7 +408,7 @@ services:
       - ./backend/.env
     ports:
       - "5002:5000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -422,7 +422,7 @@ services:
       - PORT=5000
     env_file:
       - ./backend/.env
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -436,7 +436,7 @@ services:
       - PORT=5000
     env_file:
       - ./backend/.env
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -452,7 +452,7 @@ services:
       - ./backend/.env
     ports:
       - "5000:5000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -472,7 +472,7 @@ services:
       - ./backend/.env
     ports:
       - "5005:5000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -488,7 +488,7 @@ services:
       - ./backend/.env
     ports:
       - "5006:5000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -504,7 +504,7 @@ services:
       - ./backend/.env
     ports:
       - "5016:5000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -520,7 +520,7 @@ services:
       - ./backend/.env
     ports:
       - "5011:5000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -536,7 +536,7 @@ services:
       - ./backend/.env
     ports:
       - "5012:5000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -552,7 +552,7 @@ services:
       - ./backend/.env
     ports:
       - "5013:5000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -592,7 +592,7 @@ services:
       - PAYMENT_SERVICE_URL=http://payment-service:5000
     env_file:
       - ./backend/.env
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -624,7 +624,7 @@ services:
       - ./backend/.env
     ports:
       - "5010:5000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -654,7 +654,7 @@ services:
       - REALLOCATE_RESERVATION_SERVICE_URL=http://reallocate-reservation-service:5000
     env_file:
       - ./backend/.env
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -681,7 +681,7 @@ services:
       - ./backend/.env
     ports:
       - "5009:5000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -711,7 +711,7 @@ services:
       - ./backend/.env
     ports:
       - "5015:5000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
@@ -743,7 +743,7 @@ services:
       - ./backend/.env
     ports:
       - "5014:5000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - feastfinder-network
       - supabase-network
